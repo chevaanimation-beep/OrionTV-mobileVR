@@ -27,15 +27,15 @@ jobs:
         id: package-version
         run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
 
+      # Expo SDK 51 requires Java 17 and Gradle <= 8.4
+      # ubuntu-latest ships Gradle 8.5+ which breaks expo-modules-core's ExpoModulesCorePlugin.gradle
       - name: Setup JDK 17
         uses: actions/setup-java@v3
         with:
           distribution: "zulu"
           java-version: "17"
 
-      # Step 1: Generate the Android native project (expo prebuild)
-      # We do this ONCE here. The yarn build script also calls prebuild inside,
-      # so we bypass that by calling gradlew directly in a later step.
+      # Step 1: Generate the Android native project with a single prebuild (do NOT use yarn build which re-runs prebuild)
       - name: Expo Prebuild (generate android/ directory)
         run: EXPO_TV=1 EXPO_USE_METRO_WORKSPACE_ROOT=1 npx expo prebuild --clean --non-interactive
         env:
@@ -46,12 +46,20 @@ jobs:
       - name: Copy TV XML configs
         run: cp -r xml/* android/app/src/
 
-      # Step 3: Build the release APK directly via gradlew (skip the extra prebuild inside yarn build)
+      # Step 3: Pin Gradle to 8.4 which is compatible with Expo SDK 51's expo-modules-core.
+      # ubuntu-latest ships Gradle 8.5+ which breaks components.release in ExpoModulesCorePlugin.gradle
+      - name: Pin Gradle wrapper to 8.4 for Expo SDK 51 compatibility
+        run: |
+          sed -i 's|distributionUrl=.*|distributionUrl=https\\://services.gradle.org/distributions/gradle-8.4-bin.zip|' android/gradle/wrapper/gradle-wrapper.properties
+          echo "--- Gradle wrapper after patching ---"
+          cat android/gradle/wrapper/gradle-wrapper.properties
+
+      # Step 4: Build the release APK directly via gradlew (bypass yarn build to avoid double-prebuild)
       - name: Build release APK
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon
+          ./gradlew assembleRelease --no-daemon --stacktrace
         env:
           NODE_ENV: production
           EXPO_TV: "1"
