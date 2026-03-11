@@ -1,25 +1,183 @@
-import React from "react";
+import React, { useRef, useState } from "react";
 import {
     View,
     Text,
     StyleSheet,
     TouchableOpacity,
     Modal,
-    Platform,
+    PanResponder,
+    LayoutChangeEvent,
 } from "react-native";
-import Slider from "@react-native-community/slider";
 import { X } from "lucide-react-native";
 import usePlayerStore from "@/stores/playerStore";
 
+// ===== 自定义滑块组件（纯 View + PanResponder，兼容 react-native-tvos） =====
+interface CustomSliderProps {
+    value: number;
+    minimumValue: number;
+    maximumValue: number;
+    step: number;
+    onValueChange: (value: number) => void;
+    label: string;
+    formatValue?: (value: number) => string;
+}
+
+const CustomSlider: React.FC<CustomSliderProps> = ({
+    value,
+    minimumValue,
+    maximumValue,
+    step,
+    onValueChange,
+    label,
+    formatValue,
+}) => {
+    const trackWidth = useRef(0);
+    const [dragging, setDragging] = useState(false);
+
+    const fraction = (value - minimumValue) / (maximumValue - minimumValue);
+    const displayValue = formatValue ? formatValue(value) : String(value);
+
+    const clampAndSnap = (raw: number) => {
+        const clamped = Math.max(minimumValue, Math.min(maximumValue, raw));
+        return Math.round(clamped / step) * step;
+    };
+
+    const panResponder = useRef(
+        PanResponder.create({
+            onStartShouldSetPanResponder: () => true,
+            onMoveShouldSetPanResponder: () => true,
+            onPanResponderGrant: (evt) => {
+                setDragging(true);
+                const x = evt.nativeEvent.locationX;
+                const frac = x / trackWidth.current;
+                const raw = minimumValue + frac * (maximumValue - minimumValue);
+                onValueChange(clampAndSnap(raw));
+            },
+            onPanResponderMove: (evt) => {
+                const x = evt.nativeEvent.locationX;
+                const frac = x / trackWidth.current;
+                const raw = minimumValue + frac * (maximumValue - minimumValue);
+                onValueChange(clampAndSnap(raw));
+            },
+            onPanResponderRelease: () => {
+                setDragging(false);
+            },
+            onPanResponderTerminate: () => {
+                setDragging(false);
+            },
+        })
+    ).current;
+
+    return (
+        <View style={sliderStyles.container}>
+            <View style={sliderStyles.labelRow}>
+                <Text style={sliderStyles.label}>{label}</Text>
+                <Text style={[sliderStyles.value, dragging && sliderStyles.valueDragging]}>
+                    {displayValue}
+                </Text>
+            </View>
+            <View
+                style={sliderStyles.track}
+                onLayout={(e: LayoutChangeEvent) => {
+                    trackWidth.current = e.nativeEvent.layout.width;
+                }}
+                {...panResponder.panHandlers}
+            >
+                <View style={sliderStyles.trackBg} />
+                <View
+                    style={[
+                        sliderStyles.trackFill,
+                        { width: `${Math.max(0, Math.min(100, fraction * 100))}%` },
+                    ]}
+                />
+                <View
+                    style={[
+                        sliderStyles.thumb,
+                        {
+                            left: `${Math.max(0, Math.min(100, fraction * 100))}%`,
+                        },
+                        dragging && sliderStyles.thumbActive,
+                    ]}
+                />
+            </View>
+        </View>
+    );
+};
+
+const sliderStyles = StyleSheet.create({
+    container: {
+        marginBottom: 12,
+    },
+    labelRow: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: 6,
+    },
+    label: {
+        color: "#ccc",
+        fontSize: 14,
+    },
+    value: {
+        color: "#4FC3F7",
+        fontSize: 14,
+        fontWeight: "bold",
+        minWidth: 50,
+        textAlign: "right",
+    },
+    valueDragging: {
+        color: "#fff",
+    },
+    track: {
+        height: 36,
+        justifyContent: "center",
+        position: "relative",
+    },
+    trackBg: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        height: 4,
+        backgroundColor: "#555",
+        borderRadius: 2,
+    },
+    trackFill: {
+        position: "absolute",
+        left: 0,
+        height: 4,
+        backgroundColor: "#4FC3F7",
+        borderRadius: 2,
+    },
+    thumb: {
+        position: "absolute",
+        width: 20,
+        height: 20,
+        borderRadius: 10,
+        backgroundColor: "#4FC3F7",
+        marginLeft: -10,
+        top: 8,
+        elevation: 3,
+        shadowColor: "#4FC3F7",
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.5,
+        shadowRadius: 4,
+    },
+    thumbActive: {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        marginLeft: -12,
+        top: 6,
+        backgroundColor: "#fff",
+    },
+});
+
+// ===== VR 设置面板 =====
 interface VRSettingsPanelProps {
     visible: boolean;
     onClose: () => void;
 }
 
-/**
- * VR 设置面板
- * 调节画面大小、双屏间距、畸变矫正
- */
 export const VRSettingsPanel: React.FC<VRSettingsPanelProps> = ({
     visible,
     onClose,
@@ -56,71 +214,47 @@ export const VRSettingsPanel: React.FC<VRSettingsPanelProps> = ({
                     </View>
 
                     {/* 画面大小 */}
-                    <View style={styles.settingRow}>
-                        <Text style={styles.label}>画面大小</Text>
-                        <Text style={styles.value}>{vrScale}%</Text>
-                    </View>
-                    <Slider
-                        style={styles.slider}
+                    <CustomSlider
+                        label="画面大小"
+                        value={vrScale}
                         minimumValue={50}
                         maximumValue={100}
                         step={1}
-                        value={vrScale}
                         onValueChange={setVRScale}
-                        minimumTrackTintColor="#4FC3F7"
-                        maximumTrackTintColor="#555"
-                        thumbTintColor="#4FC3F7"
+                        formatValue={(v) => `${Math.round(v)}%`}
                     />
 
                     {/* 双屏间距 */}
-                    <View style={styles.settingRow}>
-                        <Text style={styles.label}>双屏间距</Text>
-                        <Text style={styles.value}>{vrGap}</Text>
-                    </View>
-                    <Slider
-                        style={styles.slider}
+                    <CustomSlider
+                        label="双屏间距"
+                        value={vrGap}
                         minimumValue={-200}
                         maximumValue={200}
                         step={5}
-                        value={vrGap}
-                        onValueChange={(v: number) => setVRGap(Math.round(v))}
-                        minimumTrackTintColor="#4FC3F7"
-                        maximumTrackTintColor="#555"
-                        thumbTintColor="#4FC3F7"
+                        onValueChange={(v) => setVRGap(Math.round(v))}
+                        formatValue={(v) => `${Math.round(v)}`}
                     />
 
                     {/* 畸变矫正 K1 */}
-                    <View style={styles.settingRow}>
-                        <Text style={styles.label}>畸变矫正 K1</Text>
-                        <Text style={styles.value}>{vrDistortionK1.toFixed(2)}</Text>
-                    </View>
-                    <Slider
-                        style={styles.slider}
+                    <CustomSlider
+                        label="畸变矫正 K1"
+                        value={vrDistortionK1}
                         minimumValue={0}
                         maximumValue={0.5}
                         step={0.01}
-                        value={vrDistortionK1}
                         onValueChange={setVRDistortionK1}
-                        minimumTrackTintColor="#4FC3F7"
-                        maximumTrackTintColor="#555"
-                        thumbTintColor="#4FC3F7"
+                        formatValue={(v) => v.toFixed(2)}
                     />
 
                     {/* 畸变矫正 K2 */}
-                    <View style={styles.settingRow}>
-                        <Text style={styles.label}>畸变矫正 K2</Text>
-                        <Text style={styles.value}>{vrDistortionK2.toFixed(2)}</Text>
-                    </View>
-                    <Slider
-                        style={styles.slider}
+                    <CustomSlider
+                        label="畸变矫正 K2"
+                        value={vrDistortionK2}
                         minimumValue={0}
                         maximumValue={0.3}
                         step={0.01}
-                        value={vrDistortionK2}
                         onValueChange={setVRDistortionK2}
-                        minimumTrackTintColor="#4FC3F7"
-                        maximumTrackTintColor="#555"
-                        thumbTintColor="#4FC3F7"
+                        formatValue={(v) => v.toFixed(2)}
                     />
 
                     {/* 重置按钮 */}
@@ -171,29 +305,8 @@ const styles = StyleSheet.create({
     closeBtn: {
         padding: 4,
     },
-    settingRow: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "center",
-        marginTop: 12,
-    },
-    label: {
-        color: "#ccc",
-        fontSize: 14,
-    },
-    value: {
-        color: "#4FC3F7",
-        fontSize: 14,
-        fontWeight: "bold",
-        minWidth: 50,
-        textAlign: "right",
-    },
-    slider: {
-        width: "100%",
-        height: 36,
-    },
     resetBtn: {
-        marginTop: 16,
+        marginTop: 8,
         alignSelf: "center",
         paddingVertical: 8,
         paddingHorizontal: 24,
