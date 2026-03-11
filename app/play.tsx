@@ -10,6 +10,7 @@ import { PlayerControls } from "@/components/PlayerControls";
 import { EpisodeSelectionModal } from "@/components/EpisodeSelectionModal";
 import { SourceSelectionModal } from "@/components/SourceSelectionModal";
 import { SpeedSelectionModal } from "@/components/SpeedSelectionModal";
+import { VRSettingsPanel } from "@/components/VRSettingsPanel";
 import { SeekingBar } from "@/components/SeekingBar";
 import VideoLoadingAnimation from "@/components/VideoLoadingAnimation";
 import useDetailStore from "@/stores/detailStore";
@@ -122,6 +123,8 @@ export default function PlayScreen() {
     vrGap,
     vrDistortionK1,
     vrDistortionK2,
+    showVRSettingsModal,
+    setShowVRSettingsModal,
     setVideoRef,
     handlePlaybackStatusUpdate,
     setShowControls,
@@ -318,6 +321,10 @@ export default function PlayScreen() {
       <EpisodeSelectionModal />
       <SourceSelectionModal />
       <SpeedSelectionModal />
+      <VRSettingsPanel
+        visible={showVRSettingsModal}
+        onClose={() => setShowVRSettingsModal(false)}
+      />
     </ThemedView>
   );
 }

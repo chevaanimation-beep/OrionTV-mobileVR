@@ -1,6 +1,6 @@
 import React, { useRef, useCallback } from "react";
 import { View, Text, StyleSheet, Pressable, TouchableOpacity, PanResponder, LayoutChangeEvent } from "react-native";
-import { Pause, Play, SkipForward, List, Tv, ArrowDownToDot, ArrowUpFromDot, Gauge, ArrowLeft, Glasses } from "lucide-react-native";
+import { Pause, Play, SkipForward, List, Tv, ArrowDownToDot, ArrowUpFromDot, Gauge, ArrowLeft, Glasses, Settings } from "lucide-react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { MediaButton } from "@/components/MediaButton";
 import { useRouter } from "expo-router";
@@ -39,6 +39,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({ showControls, se
     outroStartTime,
     vrSBSMode,
     setVRSBSMode,
+    setShowVRSettingsModal,
     videoRef,
   } = usePlayerStore();
 
@@ -175,6 +176,15 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({ showControls, se
               <Glasses color={vrSBSMode ? "#4FC3F7" : "white"} size={20} />
               {vrSBSMode && <Text style={mobileStyles.activeBadge}>VR</Text>}
             </TouchableOpacity>
+
+            {vrSBSMode && (
+              <TouchableOpacity
+                onPress={() => setShowVRSettingsModal(true)}
+                style={mobileStyles.controlBtn}
+              >
+                <Settings color="white" size={20} />
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </View>
@@ -243,6 +253,16 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({ showControls, se
           <MediaButton onPress={() => setShowSourceModal(true)}>
             <Tv color="white" size={24} />
           </MediaButton>
+
+          <MediaButton onPress={() => setVRSBSMode(!vrSBSMode)}>
+            <Glasses color={vrSBSMode ? "#4FC3F7" : "white"} size={24} />
+          </MediaButton>
+
+          {vrSBSMode && (
+            <MediaButton onPress={() => setShowVRSettingsModal(true)}>
+              <Settings color="white" size={24} />
+            </MediaButton>
+          )}
         </View>
       </View>
     </View>

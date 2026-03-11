@@ -24,6 +24,7 @@ interface PlayerState {
   showSourceModal: boolean;
   showSpeedModal: boolean;
   showNextEpisodeOverlay: boolean;
+  showVRSettingsModal: boolean;
   isSeeking: boolean;
   seekPosition: number;
   progressPosition: number;
@@ -49,6 +50,7 @@ interface PlayerState {
   setShowSourceModal: (show: boolean) => void;
   setShowSpeedModal: (show: boolean) => void;
   setShowNextEpisodeOverlay: (show: boolean) => void;
+  setShowVRSettingsModal: (show: boolean) => void;
   setPlaybackRate: (rate: number) => void;
   setIntroEndTime: () => void;
   setOutroStartTime: () => void;
@@ -81,6 +83,7 @@ const usePlayerStore = create<PlayerState>((set, get) => ({
   showSourceModal: false,
   showSpeedModal: false,
   showNextEpisodeOverlay: false,
+  showVRSettingsModal: false,
   isSeeking: false,
   seekPosition: 0,
   progressPosition: 0,
@@ -448,6 +451,7 @@ const usePlayerStore = create<PlayerState>((set, get) => ({
   setShowSourceModal: (show) => set({ showSourceModal: show }),
   setShowSpeedModal: (show) => set({ showSpeedModal: show }),
   setShowNextEpisodeOverlay: (show) => set({ showNextEpisodeOverlay: show }),
+  setShowVRSettingsModal: (show) => set({ showVRSettingsModal: show }),
   setVRSBSMode: (enabled) => set({ vrSBSMode: enabled }),
   setVRScale: (scale) => set({ vrScale: Math.max(50, Math.min(100, scale)) }),
   setVRGap: (gap) => set({ vrGap: Math.max(-600, Math.min(600, gap)) }),
