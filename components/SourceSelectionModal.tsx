@@ -16,7 +16,7 @@ export const SourceSelectionModal: React.FC = () => {
     if (searchResults[index].source !== detail?.source) {
       const newDetail = searchResults[index];
       setDetail(newDetail);
-      
+
       // Reload the video with the new source, preserving current position
       const currentPosition = status?.isLoaded ? status.positionMillis : undefined;
       loadVideo({
@@ -64,15 +64,16 @@ export const SourceSelectionModal: React.FC = () => {
 const styles = StyleSheet.create({
   modalContainer: {
     flex: 1,
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    backgroundColor: "transparent",
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
   },
   modalContent: {
-    width: 600,
-    height: "100%",
-    backgroundColor: "rgba(0, 0, 0, 0.85)",
+    width: "80%",
+    maxWidth: 500,
+    backgroundColor: "rgba(30, 30, 30, 0.95)",
     padding: 20,
+    borderRadius: 16,
   },
   modalTitle: {
     color: "white",
@@ -89,7 +90,7 @@ const styles = StyleSheet.create({
     margin: 4,
     marginLeft: 10,
     marginRight: 8,
-    width: "30%",
+    width: "28%",
   },
   sourceItemText: {
     fontSize: 14,

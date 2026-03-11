@@ -1,15 +1,16 @@
 import React, { useEffect, useRef, useCallback, memo, useMemo } from "react";
-import { StyleSheet, TouchableOpacity, BackHandler, AppState, AppStateStatus, View } from "react-native";
+import { StyleSheet, TouchableOpacity, BackHandler, AppState, AppStateStatus, View, Platform } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { Video } from "expo-av";
+import { Video, ResizeMode } from "expo-av";
 import { useKeepAwake } from "expo-keep-awake";
+import { StatusBar } from "expo-status-bar";
+import * as ScreenOrientation from "expo-screen-orientation";
 import { ThemedView } from "@/components/ThemedView";
 import { PlayerControls } from "@/components/PlayerControls";
 import { EpisodeSelectionModal } from "@/components/EpisodeSelectionModal";
 import { SourceSelectionModal } from "@/components/SourceSelectionModal";
 import { SpeedSelectionModal } from "@/components/SpeedSelectionModal";
 import { SeekingBar } from "@/components/SeekingBar";
-// import { NextEpisodeOverlay } from "@/components/NextEpisodeOverlay";
 import VideoLoadingAnimation from "@/components/VideoLoadingAnimation";
 import useDetailStore from "@/stores/detailStore";
 import { useTVRemoteHandler } from "@/hooks/useTVRemoteHandler";
@@ -25,8 +26,7 @@ const logger = Logger.withTag('PlayScreen');
 const LoadingContainer = memo(
   ({ style, currentEpisode }: { style: any; currentEpisode: { url: string; title: string } | undefined }) => {
     logger.info(
-      `[PERF] Video component NOT rendered - waiting for valid URL. currentEpisode: ${!!currentEpisode}, url: ${
-        currentEpisode?.url ? "exists" : "missing"
+      `[PERF] Video component NOT rendered - waiting for valid URL. currentEpisode: ${!!currentEpisode}, url: ${currentEpisode?.url ? "exists" : "missing"
       }`
     );
     return (
@@ -66,16 +66,30 @@ const createResponsiveStyles = (deviceType: string) => {
       alignItems: "center",
       zIndex: 10,
     },
+    // VR SBS mode: two videos side by side
+    sbsContainer: {
+      ...StyleSheet.absoluteFillObject,
+      flexDirection: "row",
+    },
+    sbsVideoHalf: {
+      flex: 1,
+      backgroundColor: "black",
+    },
+    sbsVideoPlayer: {
+      flex: 1,
+    },
   });
 };
 
 export default function PlayScreen() {
   const videoRef = useRef<Video>(null);
+  const videoRefRight = useRef<Video>(null);
   const router = useRouter();
   useKeepAwake();
 
   // 响应式布局配置
   const { deviceType } = useResponsiveLayout();
+  const isMobile = deviceType === "mobile" || deviceType === "tablet";
 
   const {
     episodeIndex: episodeIndexStr,
@@ -100,14 +114,13 @@ export default function PlayScreen() {
   const {
     isLoading,
     showControls,
-    // showNextEpisodeOverlay,
     initialPosition,
     introEndTime,
     playbackRate,
+    vrSBSMode,
     setVideoRef,
     handlePlaybackStatusUpdate,
     setShowControls,
-    // setShowNextEpisodeOverlay,
     reset,
     loadVideo,
   } = usePlayerStore();
@@ -130,6 +143,23 @@ export default function PlayScreen() {
 
   // 优化的动态样式 - 使用useMemo避免重复计算
   const dynamicStyles = useMemo(() => createResponsiveStyles(deviceType), [deviceType]);
+
+  // ===== 手机端自动横屏 =====
+  useEffect(() => {
+    if (isMobile && Platform.OS !== "web") {
+      // 锁定为横屏
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE).catch((err) => {
+        logger.warn(`Failed to lock orientation: ${err}`);
+      });
+
+      return () => {
+        // 退出播放页面时恢复默认方向
+        ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.DEFAULT).catch((err) => {
+          logger.warn(`Failed to unlock orientation: ${err}`);
+        });
+      };
+    }
+  }, [isMobile]);
 
   useEffect(() => {
     const perfStart = performance.now();
@@ -160,6 +190,16 @@ export default function PlayScreen() {
       setShowControls(!showControls);
     }
   }, [deviceType, tvRemoteHandler, setShowControls, showControls]);
+
+  // 自动隐藏控件 (手机端)
+  useEffect(() => {
+    if (isMobile && showControls) {
+      const timer = setTimeout(() => {
+        setShowControls(false);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [isMobile, showControls, setShowControls]);
 
   useEffect(() => {
     const handleAppStateChange = (nextAppState: AppStateStatus) => {
@@ -209,27 +249,96 @@ export default function PlayScreen() {
     };
   }, [isLoading]);
 
+  // ===== VR SBS 同步：右侧视频跟踪左侧播放状态 =====
+  useEffect(() => {
+    if (!vrSBSMode || !currentEpisode?.url) return;
+
+    // 同步右侧视频的播放状态
+    const syncInterval = setInterval(async () => {
+      try {
+        const leftStatus = await videoRef.current?.getStatusAsync();
+        if (leftStatus?.isLoaded && videoRefRight.current) {
+          const rightStatus = await videoRefRight.current.getStatusAsync();
+          if (rightStatus?.isLoaded) {
+            // 同步位置（如果差距超过500ms则同步）
+            const posDiff = Math.abs(leftStatus.positionMillis - rightStatus.positionMillis);
+            if (posDiff > 500) {
+              await videoRefRight.current.setPositionAsync(leftStatus.positionMillis);
+            }
+            // 同步播放/暂停状态
+            if (leftStatus.isPlaying !== rightStatus.isPlaying) {
+              if (leftStatus.isPlaying) {
+                await videoRefRight.current.playAsync();
+              } else {
+                await videoRefRight.current.pauseAsync();
+              }
+            }
+          }
+        }
+      } catch {
+        // 忽略同步错误
+      }
+    }, 1000);
+
+    return () => clearInterval(syncInterval);
+  }, [vrSBSMode, currentEpisode?.url]);
+
   if (!detail) {
     return <VideoLoadingAnimation showProgressBar />;
   }
 
   return (
     <ThemedView focusable style={dynamicStyles.container}>
+      {/* 手机端隐藏状态栏 */}
+      {isMobile && <StatusBar hidden />}
+
       <TouchableOpacity
         activeOpacity={1}
         style={dynamicStyles.videoContainer}
         onPress={onScreenPress}
-        disabled={deviceType !== "tv" && showControls} // 移动端和平板端在显示控制条时禁用触摸
+        disabled={isMobile && showControls} // 移动端在显示控制条时禁用触摸
       >
-        {/* 条件渲染Video组件：只有在有有效URL时才渲染 */}
-        {currentEpisode?.url ? (
+        {/* VR SBS 模式：两个 Video 并排 */}
+        {vrSBSMode && currentEpisode?.url ? (
+          <View style={dynamicStyles.sbsContainer}>
+            <View style={dynamicStyles.sbsVideoHalf}>
+              <Video
+                ref={videoRef}
+                style={dynamicStyles.sbsVideoPlayer}
+                source={{ uri: currentEpisode.url }}
+                resizeMode={ResizeMode.CONTAIN}
+                rate={playbackRate}
+                onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
+                shouldPlay
+                useNativeControls={false}
+              />
+            </View>
+            <View style={dynamicStyles.sbsVideoHalf}>
+              <Video
+                ref={videoRefRight}
+                style={dynamicStyles.sbsVideoPlayer}
+                source={{ uri: currentEpisode.url }}
+                resizeMode={ResizeMode.CONTAIN}
+                rate={playbackRate}
+                shouldPlay
+                useNativeControls={false}
+                isMuted
+              />
+            </View>
+          </View>
+        ) : currentEpisode?.url ? (
           <Video ref={videoRef} style={dynamicStyles.videoPlayer} {...videoProps} />
         ) : (
           <LoadingContainer style={dynamicStyles.loadingContainer} currentEpisode={currentEpisode} />
         )}
 
-        {showControls && deviceType === "tv" && (
-          <PlayerControls showControls={showControls} setShowControls={setShowControls} />
+        {/* 显示控制条 - TV 和 Mobile/Tablet 都显示自定义控件 */}
+        {showControls && (
+          <PlayerControls
+            showControls={showControls}
+            setShowControls={setShowControls}
+            deviceType={deviceType}
+          />
         )}
 
         <SeekingBar />
@@ -240,8 +349,6 @@ export default function PlayScreen() {
             <VideoLoadingAnimation showProgressBar />
           </View>
         )}
-
-        {/* <NextEpisodeOverlay visible={showNextEpisodeOverlay} onCancel={() => setShowNextEpisodeOverlay(false)} /> */}
       </TouchableOpacity>
 
       <EpisodeSelectionModal />

@@ -109,7 +109,7 @@ export const useVideoHandlers = ({
     onLoad,
     onLoadStart,
     onError,
-    useNativeControls: deviceType !== 'tv',
+    useNativeControls: false,
     shouldPlay: true,
   }), [
     currentEpisode?.url,

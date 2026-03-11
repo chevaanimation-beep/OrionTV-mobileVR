@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Modal, FlatList } from "react-native";
 import { StyledButton } from "./StyledButton";
 import usePlayerStore from "@/stores/playerStore";
 
-interface EpisodeSelectionModalProps {}
+interface EpisodeSelectionModalProps { }
 
 export const EpisodeSelectionModal: React.FC<EpisodeSelectionModalProps> = () => {
   const { showEpisodeModal, episodes, currentEpisodeIndex, playEpisode, setShowEpisodeModal } = usePlayerStore();
@@ -74,15 +74,17 @@ export const EpisodeSelectionModal: React.FC<EpisodeSelectionModalProps> = () =>
 const styles = StyleSheet.create({
   modalContainer: {
     flex: 1,
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    backgroundColor: "transparent",
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
   },
   modalContent: {
-    width: 600,
-    height: "100%",
-    backgroundColor: "rgba(0, 0, 0, 0.85)",
+    width: "85%",
+    maxWidth: 600,
+    maxHeight: "80%",
+    backgroundColor: "rgba(30, 30, 30, 0.95)",
     padding: 20,
+    borderRadius: 16,
   },
   modalTitle: {
     color: "white",
