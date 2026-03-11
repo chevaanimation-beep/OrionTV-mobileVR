@@ -8,7 +8,7 @@ permissions:
 
 jobs:
   direct_build:
-    name: Build Android Debug APK
+    name: Build Android APK
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -75,20 +75,20 @@ jobs:
       - name: Verify patch
         run: grep -n "releaseComp" node_modules/expo-modules-core/android/ExpoModulesCorePlugin.gradle
 
-      # Build debug APK — always signed with Android debug keystore, no signing config needed
-      # Output: android/app/build/outputs/apk/debug/app-debug.apk
-      - name: Build debug APK
+      # Build release APK — bundles the JavaScript so it can run standalone without Metro
+      # Output: android/app/build/outputs/apk/release/app-release.apk
+      - name: Build release APK
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleRelease --no-daemon
         env:
           EXPO_TV: "1"
 
       - name: Rename APK
         run: |
           mkdir -p artifacts
-          cp android/app/build/outputs/apk/debug/app-debug.apk \
+          cp android/app/build/outputs/apk/release/app-release.apk \
              artifacts/orionTV.${{ steps.package-version.outputs.version }}.apk
 
       - name: Create Release and Upload APK
