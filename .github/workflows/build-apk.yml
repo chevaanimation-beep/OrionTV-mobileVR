@@ -45,13 +45,63 @@ jobs:
       - name: Copy TV XML configs
         run: cp -r xml/* android/app/src/
 
-      # Fix: expo (Expo SDK 51) calls useExpoPublishing() in android/build.gradle, which
-      # accesses `components.release` inside afterEvaluate. With AGP 8.x, the `release`
-      # SoftwareComponent is registered lazily and is not available yet, causing:
-      #   MissingPropertyException: Could not get unknown property 'release'
-      # Fix: replace with components.findByName("release") null-guard.
-      # This is safe — the app never publishes to Maven; this block only matters for library modules.
-      - name: Patch ExpoModulesCorePlugin.gradle (fix AGP 8.x components.release)
+      # Copy native VR SBS module into the generated android project
+      - name: Copy native VR module
+        run: |
+          mkdir -p android/app/src/main/java/com/oriontv/vr
+          cp native/android/com/oriontv/vr/*.kt android/app/src/main/java/com/oriontv/vr/
+          echo "--- Copied VR module files ---"
+          ls -la android/app/src/main/java/com/oriontv/vr/
+
+      # Register VRPlayerPackage in MainApplication so React Native finds <NativeVRPlayer>
+      - name: Register VR native module in MainApplication
+        run: |
+          node << 'REGEOF'
+          const fs = require('fs');
+          const mainAppPath = 'android/app/src/main/java/com/oriontv/MainApplication.kt';
+          let content = fs.readFileSync(mainAppPath, 'utf8');
+
+          // Add import
+          if (!content.includes('com.oriontv.vr.VRPlayerPackage')) {
+            content = content.replace(
+              'import android.app.Application',
+              'import android.app.Application\nimport com.oriontv.vr.VRPlayerPackage'
+            );
+
+            // Add to packages list
+            content = content.replace(
+              /override fun getPackages\(\): List<ReactPackage> \{[\s\S]*?return PackageList\(this\)\.packages/,
+              (match) => match + '.apply { add(VRPlayerPackage()) }'
+            );
+
+            fs.writeFileSync(mainAppPath, content);
+            console.log('SUCCESS: Registered VRPlayerPackage in MainApplication');
+          } else {
+            console.log('SKIP: VRPlayerPackage already registered');
+          }
+          REGEOF
+
+      # Add ExoPlayer (media3) dependency — needed by VRPlayerView for video decoding
+      - name: Add media3-exoplayer dependency
+        run: |
+          node << 'DEPEOF'
+          const fs = require('fs');
+          const gradlePath = 'android/app/build.gradle';
+          let content = fs.readFileSync(gradlePath, 'utf8');
+          if (!content.includes('media3-exoplayer')) {
+            content = content.replace(
+              /dependencies\s*\{/,
+              'dependencies {\n    implementation "androidx.media3:media3-exoplayer:1.3.1"\n    implementation "androidx.media3:media3-datasource:1.3.1"'
+            );
+            fs.writeFileSync(gradlePath, content);
+            console.log('SUCCESS: Added media3-exoplayer dependency');
+          } else {
+            console.log('SKIP: media3-exoplayer already present');
+          }
+          DEPEOF
+
+      # Patch ExpoModulesCorePlugin.gradle (fix AGP 8.x components.release)
+      - name: Patch ExpoModulesCorePlugin.gradle
         run: |
           node << 'EOF'
           const fs = require('fs');
@@ -60,7 +110,7 @@ jobs:
           const original = 'from components.release';
           if (content.includes(original)) {
             const patched = [
-              '// PATCHED for AGP 8.x compatibility: components.release is lazy and may not exist yet',
+              '// PATCHED for AGP 8.x compatibility',
               '            def releaseComp = components.findByName("release")',
               '            if (releaseComp != null) from releaseComp',
             ].join('\n');
@@ -72,8 +122,16 @@ jobs:
           }
           EOF
 
-      - name: Verify patch
-        run: grep -n "releaseComp" node_modules/expo-modules-core/android/ExpoModulesCorePlugin.gradle
+      - name: Verify patches
+        run: |
+          echo "--- VR module files ---"
+          ls android/app/src/main/java/com/oriontv/vr/
+          echo "--- MainApplication VRPlayerPackage ---"
+          grep -n "VRPlayerPackage" android/app/src/main/java/com/oriontv/MainApplication.kt || echo "WARNING: not found"
+          echo "--- media3 dependency ---"
+          grep -n "media3" android/app/build.gradle || echo "WARNING: not found"
+          echo "--- ExpoModulesCorePlugin patch ---"
+          grep -n "releaseComp" node_modules/expo-modules-core/android/ExpoModulesCorePlugin.gradle || echo "WARNING: not found"
 
       # Build release APK — bundles the JavaScript so it can run standalone without Metro
       # Output: android/app/build/outputs/apk/release/app-release.apk

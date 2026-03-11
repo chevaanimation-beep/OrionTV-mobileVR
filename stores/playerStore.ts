@@ -55,6 +55,14 @@ interface PlayerState {
   reset: () => void;
   vrSBSMode: boolean;
   setVRSBSMode: (enabled: boolean) => void;
+  vrScale: number;
+  vrGap: number;
+  vrDistortionK1: number;
+  vrDistortionK2: number;
+  setVRScale: (scale: number) => void;
+  setVRGap: (gap: number) => void;
+  setVRDistortionK1: (k1: number) => void;
+  setVRDistortionK2: (k2: number) => void;
   _seekTimeout?: NodeJS.Timeout;
   _isRecordSaveThrottled: boolean;
   // Internal helper
@@ -81,6 +89,10 @@ const usePlayerStore = create<PlayerState>((set, get) => ({
   introEndTime: undefined,
   outroStartTime: undefined,
   vrSBSMode: false,
+  vrScale: 85,
+  vrGap: 0,
+  vrDistortionK1: 0,
+  vrDistortionK2: 0,
   _seekTimeout: undefined,
   _isRecordSaveThrottled: false,
 
@@ -437,6 +449,10 @@ const usePlayerStore = create<PlayerState>((set, get) => ({
   setShowSpeedModal: (show) => set({ showSpeedModal: show }),
   setShowNextEpisodeOverlay: (show) => set({ showNextEpisodeOverlay: show }),
   setVRSBSMode: (enabled) => set({ vrSBSMode: enabled }),
+  setVRScale: (scale) => set({ vrScale: Math.max(50, Math.min(100, scale)) }),
+  setVRGap: (gap) => set({ vrGap: Math.max(-600, Math.min(600, gap)) }),
+  setVRDistortionK1: (k1) => set({ vrDistortionK1: Math.max(0, Math.min(0.5, k1)) }),
+  setVRDistortionK2: (k2) => set({ vrDistortionK2: Math.max(0, Math.min(0.3, k2)) }),
 
   setPlaybackRate: async (rate) => {
     const { videoRef } = get();

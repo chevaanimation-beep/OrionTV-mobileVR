@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { Video, ResizeMode } from "expo-av";
 import { useKeepAwake } from "expo-keep-awake";
 import { StatusBar } from "expo-status-bar";
+import { NativeVRPlayer, NativeVRPlayerRef } from "@/components/NativeVRPlayer";
 import { ThemedView } from "@/components/ThemedView";
 import { PlayerControls } from "@/components/PlayerControls";
 import { EpisodeSelectionModal } from "@/components/EpisodeSelectionModal";
@@ -82,7 +83,7 @@ const createResponsiveStyles = (deviceType: string) => {
 
 export default function PlayScreen() {
   const videoRef = useRef<Video>(null);
-  const videoRefRight = useRef<Video>(null);
+  const vrPlayerRef = useRef<NativeVRPlayerRef>(null);
   const router = useRouter();
   useKeepAwake();
 
@@ -117,6 +118,10 @@ export default function PlayScreen() {
     introEndTime,
     playbackRate,
     vrSBSMode,
+    vrScale,
+    vrGap,
+    vrDistortionK1,
+    vrDistortionK2,
     setVideoRef,
     handlePlaybackStatusUpdate,
     setShowControls,
@@ -252,39 +257,7 @@ export default function PlayScreen() {
     };
   }, [isLoading]);
 
-  // ===== VR SBS 同步：右侧视频跟踪左侧播放状态 =====
-  useEffect(() => {
-    if (!vrSBSMode || !currentEpisode?.url) return;
-
-    // 同步右侧视频的播放状态
-    const syncInterval = setInterval(async () => {
-      try {
-        const leftStatus = await videoRef.current?.getStatusAsync();
-        if (leftStatus?.isLoaded && videoRefRight.current) {
-          const rightStatus = await videoRefRight.current.getStatusAsync();
-          if (rightStatus?.isLoaded) {
-            // 同步位置（如果差距超过500ms则同步）
-            const posDiff = Math.abs(leftStatus.positionMillis - rightStatus.positionMillis);
-            if (posDiff > 500) {
-              await videoRefRight.current.setPositionAsync(leftStatus.positionMillis);
-            }
-            // 同步播放/暂停状态
-            if (leftStatus.isPlaying !== rightStatus.isPlaying) {
-              if (leftStatus.isPlaying) {
-                await videoRefRight.current.playAsync();
-              } else {
-                await videoRefRight.current.pauseAsync();
-              }
-            }
-          }
-        }
-      } catch {
-        // 忽略同步错误
-      }
-    }, 1000);
-
-    return () => clearInterval(syncInterval);
-  }, [vrSBSMode, currentEpisode?.url]);
+  // VR SBS 同步不再需要 — 原生 OpenGL 渲染器通过单一解码器实现帧级同步
 
   if (!detail) {
     return <VideoLoadingAnimation showProgressBar />;
@@ -301,34 +274,22 @@ export default function PlayScreen() {
         onPress={onScreenPress}
         disabled={isMobile && showControls} // 移动端在显示控制条时禁用触摸
       >
-        {/* VR SBS 模式：两个 Video 并排 */}
-        {vrSBSMode && currentEpisode?.url ? (
-          <View style={dynamicStyles.sbsContainer}>
-            <View style={dynamicStyles.sbsVideoHalf}>
-              <Video
-                ref={videoRef}
-                style={dynamicStyles.sbsVideoPlayer}
-                source={{ uri: currentEpisode.url }}
-                resizeMode={ResizeMode.CONTAIN}
-                rate={playbackRate}
-                onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
-                shouldPlay
-                useNativeControls={false}
-              />
-            </View>
-            <View style={dynamicStyles.sbsVideoHalf}>
-              <Video
-                ref={videoRefRight}
-                style={dynamicStyles.sbsVideoPlayer}
-                source={{ uri: currentEpisode.url }}
-                resizeMode={ResizeMode.CONTAIN}
-                rate={playbackRate}
-                shouldPlay
-                useNativeControls={false}
-                isMuted
-              />
-            </View>
-          </View>
+        {/* VR SBS 模式：使用原生 OpenGL 渲染器（单解码器，帧级同步） */}
+        {vrSBSMode && currentEpisode?.url && Platform.OS === "android" ? (
+          <NativeVRPlayer
+            ref={vrPlayerRef}
+            uri={currentEpisode.url}
+            rate={playbackRate}
+            scale={vrScale}
+            gap={vrGap}
+            distortionK1={vrDistortionK1}
+            distortionK2={vrDistortionK2}
+            paused={false}
+            style={StyleSheet.absoluteFillObject}
+            onVRStatusUpdate={(e) => {
+              // 可以将原生播放器的状态同步到 playerStore
+            }}
+          />
         ) : currentEpisode?.url ? (
           <Video ref={videoRef} style={dynamicStyles.videoPlayer} {...videoProps} />
         ) : (
