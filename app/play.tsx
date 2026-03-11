@@ -1,10 +1,9 @@
 import React, { useEffect, useRef, useCallback, memo, useMemo } from "react";
-import { StyleSheet, TouchableOpacity, BackHandler, AppState, AppStateStatus, View, Platform } from "react-native";
+import { StyleSheet, TouchableOpacity, BackHandler, AppState, AppStateStatus, View, Platform, NativeModules } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Video, ResizeMode } from "expo-av";
 import { useKeepAwake } from "expo-keep-awake";
 import { StatusBar } from "expo-status-bar";
-import * as ScreenOrientation from "expo-screen-orientation";
 import { ThemedView } from "@/components/ThemedView";
 import { PlayerControls } from "@/components/PlayerControls";
 import { EpisodeSelectionModal } from "@/components/EpisodeSelectionModal";
@@ -144,19 +143,23 @@ export default function PlayScreen() {
   // 优化的动态样式 - 使用useMemo避免重复计算
   const dynamicStyles = useMemo(() => createResponsiveStyles(deviceType), [deviceType]);
 
-  // ===== 手机端自动横屏 =====
+  // ===== 手机端自动横屏 (通过 Android Activity 原生接口实现，无需额外依赖) =====
   useEffect(() => {
-    if (isMobile && Platform.OS !== "web") {
-      // 锁定为横屏
-      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE).catch((err) => {
-        logger.warn(`Failed to lock orientation: ${err}`);
-      });
+    if (isMobile && Platform.OS === "android") {
+      try {
+        // ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE = 0
+        NativeModules.RNScreenOrientation?.lockToLandscape?.();
+      } catch {
+        // 忽略不支持的设备
+      }
 
       return () => {
-        // 退出播放页面时恢复默认方向
-        ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.DEFAULT).catch((err) => {
-          logger.warn(`Failed to unlock orientation: ${err}`);
-        });
+        try {
+          // 恢复 SCREEN_ORIENTATION_UNSPECIFIED = -1
+          NativeModules.RNScreenOrientation?.unlockAllOrientations?.();
+        } catch {
+          // 忽略
+        }
       };
     }
   }, [isMobile]);
