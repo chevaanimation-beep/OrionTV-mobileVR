@@ -4612,7 +4612,7 @@ expo-router@~3.5.16:
     react-native-helmet-async "2.0.4"
     schema-utils "^4.0.1"
 
-expo-screen-orientation@^55.0.8:
+expo-screen-orientation@55.0.8:
   version "55.0.8"
   resolved "https://registry.yarnpkg.com/expo-screen-orientation/-/expo-screen-orientation-55.0.8.tgz#26b7821a1fe3634c9ceef37e63084ee2b21e89d2"
   integrity sha512-KhsOX17s/2c8Lv4QKOYsfkPEwpZTGP/V4lZQ5dUMRXAtueMNPg9ewcb4KrJrpvqO3j+yRYIU8t95WRCq1zjmDw==
