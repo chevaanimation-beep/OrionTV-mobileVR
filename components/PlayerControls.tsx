@@ -1,6 +1,6 @@
 import React, { useRef, useCallback } from "react";
 import { View, Text, StyleSheet, Pressable, TouchableOpacity, PanResponder, LayoutChangeEvent } from "react-native";
-import { Pause, Play, SkipForward, List, Tv, ArrowDownToDot, ArrowUpFromDot, Gauge, ArrowLeft, Glasses, Settings } from "lucide-react-native";
+import { Pause, Play, SkipForward, List, Tv, ArrowDownToDot, ArrowUpFromDot, Gauge, ArrowLeft, Glasses, Settings, Lock, LockOpen, RotateCcw } from "lucide-react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { MediaButton } from "@/components/MediaButton";
 import { useRouter } from "expo-router";
@@ -13,9 +13,10 @@ interface PlayerControlsProps {
   showControls: boolean;
   setShowControls: (show: boolean) => void;
   deviceType?: string;
+  vrPlayerRef?: React.RefObject<{ seekTo: (ms: number) => void; play: () => void; pause: () => void; }>;
 }
 
-export const PlayerControls: React.FC<PlayerControlsProps> = ({ showControls, setShowControls, deviceType = "tv" }) => {
+export const PlayerControls: React.FC<PlayerControlsProps> = ({ showControls, setShowControls, deviceType = "tv", vrPlayerRef }) => {
   const router = useRouter();
   const isMobile = deviceType === "mobile" || deviceType === "tablet";
   const progressBarWidth = useRef(0);
@@ -40,6 +41,10 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({ showControls, se
     vrSBSMode,
     setVRSBSMode,
     setShowVRSettingsModal,
+    isLocked,
+    setIsLocked,
+    isRotated,
+    setIsRotated,
     videoRef,
   } = usePlayerStore();
 
@@ -78,9 +83,14 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({ showControls, se
   const seekToPosition = useCallback((locationX: number) => {
     if (!status?.isLoaded || !status.durationMillis || progressBarWidth.current <= 0) return;
     const ratio = Math.max(0, Math.min(1, locationX / progressBarWidth.current));
-    const newPosition = Math.floor(ratio * status.durationMillis);
-    videoRef?.current?.setPositionAsync(newPosition);
-  }, [status, videoRef]);
+    const newPositionMs = Math.floor(ratio * status.durationMillis);
+    if (vrSBSMode && vrPlayerRef?.current) {
+      // VR 模式：走原生播放器的 seekTo 命令
+      vrPlayerRef.current.seekTo(newPositionMs);
+    } else {
+      videoRef?.current?.setPositionAsync(newPositionMs);
+    }
+  }, [status, videoRef, vrSBSMode, vrPlayerRef]);
 
   const progressPanResponder = useRef(
     PanResponder.create({
@@ -98,6 +108,21 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({ showControls, se
   const handleBack = useCallback(() => {
     router.back();
   }, [router]);
+
+  // ===== Lock screen overlay =====
+  if (isLocked) {
+    return (
+      <View style={mobileStyles.lockedOverlay} pointerEvents="box-none">
+        <TouchableOpacity
+          style={mobileStyles.unlockBtn}
+          onPress={() => setIsLocked(false)}
+          hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+        >
+          <Lock color="rgba(255,255,255,0.7)" size={28} />
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   // ===== Mobile Layout =====
   if (isMobile) {
@@ -185,6 +210,22 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({ showControls, se
                 <Settings color="white" size={20} />
               </TouchableOpacity>
             )}
+
+            {/* 旋转按鈕：90度旋转屏幕（模拟横竖屏切换） */}
+            <TouchableOpacity
+              onPress={() => setIsRotated(!isRotated)}
+              style={[mobileStyles.controlBtn, isRotated && mobileStyles.activeBtn]}
+            >
+              <RotateCcw color={isRotated ? "#4FC3F7" : "white"} size={20} />
+            </TouchableOpacity>
+
+            {/* 锁屏按鈕 */}
+            <TouchableOpacity
+              onPress={() => setIsLocked(true)}
+              style={mobileStyles.controlBtn}
+            >
+              <LockOpen color="white" size={20} />
+            </TouchableOpacity>
           </View>
         </View>
       </View>
@@ -359,6 +400,21 @@ const mobileStyles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "bold",
     marginLeft: 2,
+  },
+  // 锁屏 overlay
+  lockedOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: "center",
+    alignItems: "flex-end",
+    paddingRight: 24,
+    zIndex: 30,
+  },
+  unlockBtn: {
+    padding: 12,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    borderRadius: 50,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.3)",
   },
 });
 

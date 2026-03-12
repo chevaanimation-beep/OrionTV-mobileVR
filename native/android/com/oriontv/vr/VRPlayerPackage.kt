@@ -11,7 +11,7 @@ import com.facebook.react.uimanager.ViewManager
  */
 class VRPlayerPackage : ReactPackage {
     override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> {
-        return emptyList()
+        return listOf(BrightnessModule(reactContext))
     }
 
     override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> {

@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useCallback, memo, useMemo } from "react";
-import { StyleSheet, TouchableOpacity, BackHandler, AppState, AppStateStatus, View, Platform, NativeModules } from "react-native";
+import React, { useEffect, useRef, useCallback, memo, useMemo, useState } from "react";
+import { StyleSheet, TouchableOpacity, BackHandler, AppState, AppStateStatus, View, Platform, NativeModules, PanResponder, useWindowDimensions } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Video, ResizeMode } from "expo-av";
 import { useKeepAwake } from "expo-keep-awake";
@@ -125,6 +125,8 @@ export default function PlayScreen() {
     vrDistortionK2,
     showVRSettingsModal,
     setShowVRSettingsModal,
+    isLocked,
+    isRotated,
     setVideoRef,
     handlePlaybackStatusUpdate,
     setShowControls,
@@ -148,8 +150,42 @@ export default function PlayScreen() {
   // TV遥控器处理 - 总是调用hook，但根据设备类型决定是否使用结果
   const tvRemoteHandler = useTVRemoteHandler();
 
-  // 优化的动态样式 - 使用useMemo避免重复计算
+  // 优化的动态样式
   const dynamicStyles = useMemo(() => createResponsiveStyles(deviceType), [deviceType]);
+
+  // ===== 屏幕尺寸（用于旋转变换计算）=====
+  const { width: screenW, height: screenH } = useWindowDimensions();
+
+  // ===== 亮度手势：左侧上下滑动 =====
+  const [brightnessOverlay, setBrightnessOverlay] = useState<number | null>(null);
+  const brightnessTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const startBrightness = useRef(0.5);
+
+  const brightnessPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: (evt) => {
+        // 只响应左侧 1/4 屏幕的手势
+        return evt.nativeEvent.pageX < screenW * 0.25;
+      },
+      onMoveShouldSetPanResponder: (evt) => {
+        return evt.nativeEvent.pageX < screenW * 0.25;
+      },
+      onPanResponderGrant: () => {
+        NativeModules.BrightnessModule?.getBrightness((v: number) => {
+          startBrightness.current = v;
+        });
+      },
+      onPanResponderMove: (_, gestureState) => {
+        // 上滑增亮，下滑减暗；滑动整屏高度 = 从 0 到 1
+        const delta = -gestureState.dy / screenH;
+        const newBrightness = Math.max(0.02, Math.min(1, startBrightness.current + delta));
+        NativeModules.BrightnessModule?.setBrightness(newBrightness);
+        setBrightnessOverlay(newBrightness);
+        if (brightnessTimerRef.current) clearTimeout(brightnessTimerRef.current);
+        brightnessTimerRef.current = setTimeout(() => setBrightnessOverlay(null), 1500);
+      },
+    })
+  ).current;
 
   // ===== 手机端自动横屏 (通过 Android Activity 原生接口实现，无需额外依赖) =====
   useEffect(() => {
@@ -273,9 +309,19 @@ export default function PlayScreen() {
 
       <TouchableOpacity
         activeOpacity={1}
-        style={dynamicStyles.videoContainer}
+        style={[
+          dynamicStyles.videoContainer,
+          isRotated && {
+            transform: [{ rotate: '90deg' }],
+            width: screenH,
+            height: screenW,
+            marginTop: (screenW - screenH) / 2,
+            marginLeft: (screenH - screenW) / 2,
+          }
+        ]}
         onPress={onScreenPress}
-        disabled={isMobile && showControls} // 移动端在显示控制条时禁用触摸
+        disabled={isMobile && showControls}
+        {...(isMobile ? brightnessPanResponder.panHandlers : {})}
       >
         {/* VR SBS 模式：使用原生 OpenGL 渲染器（单解码器，帧级同步） */}
         {vrSBSMode && currentEpisode?.url && Platform.OS === "android" ? (
@@ -299,13 +345,23 @@ export default function PlayScreen() {
           <LoadingContainer style={dynamicStyles.loadingContainer} currentEpisode={currentEpisode} />
         )}
 
-        {/* 显示控制条 - TV 和 Mobile/Tablet 都显示自定义控件 */}
-        {showControls && (
+        {/* 显示控制条 */}
+        {(showControls || isLocked) && (
           <PlayerControls
             showControls={showControls}
             setShowControls={setShowControls}
             deviceType={deviceType}
+            vrPlayerRef={vrPlayerRef}
           />
+        )}
+
+        {/* 亮度提示浮层 */}
+        {brightnessOverlay !== null && (
+          <View style={playStyles.brightnessOverlay} pointerEvents="none">
+            <View style={playStyles.brightnessBar}>
+              <View style={[playStyles.brightnessFill, { height: `${Math.round(brightnessOverlay * 100)}%` as any }]} />
+            </View>
+          </View>
         )}
 
         <SeekingBar />
@@ -328,3 +384,28 @@ export default function PlayScreen() {
     </ThemedView>
   );
 }
+
+const playStyles = StyleSheet.create({
+  brightnessOverlay: {
+    position: "absolute",
+    left: 16,
+    top: "20%",
+    bottom: "20%",
+    width: 36,
+    justifyContent: "flex-end",
+    alignItems: "center",
+  },
+  brightnessBar: {
+    width: 4,
+    flex: 1,
+    backgroundColor: "rgba(255,255,255,0.25)",
+    borderRadius: 2,
+    overflow: "hidden",
+    justifyContent: "flex-end",
+  },
+  brightnessFill: {
+    width: "100%",
+    backgroundColor: "#FFD700",
+    borderRadius: 2,
+  },
+});
