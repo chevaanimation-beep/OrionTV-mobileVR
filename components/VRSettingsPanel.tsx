@@ -7,11 +7,12 @@ import {
     Modal,
     PanResponder,
     LayoutChangeEvent,
+    ScrollView,
 } from "react-native";
 import { X } from "lucide-react-native";
 import usePlayerStore from "@/stores/playerStore";
 
-// ===== 自定义滑块组件（纯 View + PanResponder，兼容 react-native-tvos） =====
+// ===== 自定义滑块（纯 RN 原生，兼容 react-native-tvos）=====
 interface CustomSliderProps {
     value: number;
     minimumValue: number;
@@ -59,14 +60,13 @@ const CustomSlider: React.FC<CustomSliderProps> = ({
                 const raw = minimumValue + frac * (maximumValue - minimumValue);
                 onValueChange(clampAndSnap(raw));
             },
-            onPanResponderRelease: () => {
-                setDragging(false);
-            },
-            onPanResponderTerminate: () => {
-                setDragging(false);
-            },
+            onPanResponderRelease: () => setDragging(false),
+            onPanResponderTerminate: () => setDragging(false),
         })
     ).current;
+
+    const fillPercent = `${Math.max(0, Math.min(100, fraction * 100))}%`;
+    const thumbPercent = `${Math.max(0, Math.min(100, fraction * 100))}%`;
 
     return (
         <View style={sliderStyles.container}>
@@ -84,18 +84,11 @@ const CustomSlider: React.FC<CustomSliderProps> = ({
                 {...panResponder.panHandlers}
             >
                 <View style={sliderStyles.trackBg} />
-                <View
-                    style={[
-                        sliderStyles.trackFill,
-                        { width: `${Math.max(0, Math.min(100, fraction * 100))}%` },
-                    ]}
-                />
+                <View style={[sliderStyles.trackFill, { width: fillPercent as any }]} />
                 <View
                     style={[
                         sliderStyles.thumb,
-                        {
-                            left: `${Math.max(0, Math.min(100, fraction * 100))}%`,
-                        },
+                        { left: thumbPercent as any },
                         dragging && sliderStyles.thumbActive,
                     ]}
                 />
@@ -112,17 +105,17 @@ const sliderStyles = StyleSheet.create({
         flexDirection: "row",
         justifyContent: "space-between",
         alignItems: "center",
-        marginBottom: 6,
+        marginBottom: 4,
     },
     label: {
         color: "#ccc",
-        fontSize: 14,
+        fontSize: 13,
     },
     value: {
         color: "#4FC3F7",
-        fontSize: 14,
+        fontSize: 13,
         fontWeight: "bold",
-        minWidth: 50,
+        minWidth: 44,
         textAlign: "right",
     },
     valueDragging: {
@@ -138,7 +131,7 @@ const sliderStyles = StyleSheet.create({
         left: 0,
         right: 0,
         height: 4,
-        backgroundColor: "#555",
+        backgroundColor: "#444",
         borderRadius: 2,
     },
     trackFill: {
@@ -156,11 +149,6 @@ const sliderStyles = StyleSheet.create({
         backgroundColor: "#4FC3F7",
         marginLeft: -10,
         top: 8,
-        elevation: 3,
-        shadowColor: "#4FC3F7",
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.5,
-        shadowRadius: 4,
     },
     thumbActive: {
         width: 24,
@@ -178,10 +166,7 @@ interface VRSettingsPanelProps {
     onClose: () => void;
 }
 
-export const VRSettingsPanel: React.FC<VRSettingsPanelProps> = ({
-    visible,
-    onClose,
-}) => {
+export const VRSettingsPanel: React.FC<VRSettingsPanelProps> = ({ visible, onClose }) => {
     const {
         vrScale,
         vrGap,
@@ -203,61 +188,63 @@ export const VRSettingsPanel: React.FC<VRSettingsPanelProps> = ({
             onRequestClose={onClose}
             statusBarTranslucent
         >
-            <View style={styles.overlay}>
+            {/* pointerEvents="box-none"：overlay 区域不拦截点击，只有面板内部响应交互 */}
+            <View style={styles.overlay} pointerEvents="box-none">
                 <View style={styles.panel}>
                     {/* 标题栏 */}
                     <View style={styles.header}>
                         <Text style={styles.title}>🥽 VR 设置</Text>
-                        <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-                            <X color="white" size={20} />
+                        <TouchableOpacity
+                            onPress={onClose}
+                            style={styles.closeBtn}
+                            hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+                        >
+                            <X color="white" size={22} />
                         </TouchableOpacity>
                     </View>
 
-                    {/* 画面大小 */}
-                    <CustomSlider
-                        label="画面大小"
-                        value={vrScale}
-                        minimumValue={50}
-                        maximumValue={100}
-                        step={1}
-                        onValueChange={setVRScale}
-                        formatValue={(v) => `${Math.round(v)}%`}
-                    />
+                    <ScrollView showsVerticalScrollIndicator={false}>
+                        <CustomSlider
+                            label="画面大小"
+                            value={vrScale}
+                            minimumValue={50}
+                            maximumValue={100}
+                            step={1}
+                            onValueChange={setVRScale}
+                            formatValue={(v) => `${Math.round(v)}%`}
+                        />
 
-                    {/* 双屏间距 */}
-                    <CustomSlider
-                        label="双屏间距"
-                        value={vrGap}
-                        minimumValue={-200}
-                        maximumValue={200}
-                        step={5}
-                        onValueChange={(v) => setVRGap(Math.round(v))}
-                        formatValue={(v) => `${Math.round(v)}`}
-                    />
+                        <CustomSlider
+                            label="双屏间距"
+                            value={vrGap}
+                            minimumValue={-200}
+                            maximumValue={200}
+                            step={5}
+                            onValueChange={(v) => setVRGap(Math.round(v))}
+                            formatValue={(v) => `${Math.round(v)}`}
+                        />
 
-                    {/* 畸变矫正 K1 */}
-                    <CustomSlider
-                        label="畸变矫正 K1"
-                        value={vrDistortionK1}
-                        minimumValue={0}
-                        maximumValue={0.5}
-                        step={0.01}
-                        onValueChange={setVRDistortionK1}
-                        formatValue={(v) => v.toFixed(2)}
-                    />
+                        <CustomSlider
+                            label="畸变矫正 K1"
+                            value={vrDistortionK1}
+                            minimumValue={0}
+                            maximumValue={0.5}
+                            step={0.01}
+                            onValueChange={setVRDistortionK1}
+                            formatValue={(v) => v.toFixed(2)}
+                        />
 
-                    {/* 畸变矫正 K2 */}
-                    <CustomSlider
-                        label="畸变矫正 K2"
-                        value={vrDistortionK2}
-                        minimumValue={0}
-                        maximumValue={0.3}
-                        step={0.01}
-                        onValueChange={setVRDistortionK2}
-                        formatValue={(v) => v.toFixed(2)}
-                    />
+                        <CustomSlider
+                            label="畸变矫正 K2"
+                            value={vrDistortionK2}
+                            minimumValue={0}
+                            maximumValue={0.3}
+                            step={0.01}
+                            onValueChange={setVRDistortionK2}
+                            formatValue={(v) => v.toFixed(2)}
+                        />
+                    </ScrollView>
 
-                    {/* 重置按钮 */}
                     <TouchableOpacity
                         style={styles.resetBtn}
                         onPress={() => {
@@ -278,28 +265,29 @@ export const VRSettingsPanel: React.FC<VRSettingsPanelProps> = ({
 const styles = StyleSheet.create({
     overlay: {
         flex: 1,
-        backgroundColor: "rgba(0, 0, 0, 0.6)",
+        backgroundColor: "rgba(0, 0, 0, 0.35)",
         justifyContent: "center",
-        alignItems: "center",
+        alignItems: "flex-end",   // 靠右侧，横屏时只占半屏，不遮画面
+        paddingRight: 12,
     },
     panel: {
-        width: "80%",
-        maxWidth: 400,
-        backgroundColor: "rgba(30, 30, 30, 0.95)",
+        width: 300,
+        maxHeight: "92%",
+        backgroundColor: "rgba(10, 10, 10, 0.72)",  // 高透明度，方便预览效果
         borderRadius: 16,
-        padding: 20,
+        padding: 16,
         borderWidth: 1,
-        borderColor: "rgba(79, 195, 247, 0.3)",
+        borderColor: "rgba(79, 195, 247, 0.45)",
     },
     header: {
         flexDirection: "row",
         justifyContent: "space-between",
         alignItems: "center",
-        marginBottom: 16,
+        marginBottom: 12,
     },
     title: {
         color: "white",
-        fontSize: 18,
+        fontSize: 16,
         fontWeight: "bold",
     },
     closeBtn: {
@@ -308,16 +296,16 @@ const styles = StyleSheet.create({
     resetBtn: {
         marginTop: 8,
         alignSelf: "center",
-        paddingVertical: 8,
-        paddingHorizontal: 24,
+        paddingVertical: 7,
+        paddingHorizontal: 20,
         borderRadius: 8,
-        backgroundColor: "rgba(79, 195, 247, 0.2)",
+        backgroundColor: "rgba(79, 195, 247, 0.18)",
         borderWidth: 1,
-        borderColor: "rgba(79, 195, 247, 0.4)",
+        borderColor: "rgba(79, 195, 247, 0.45)",
     },
     resetText: {
         color: "#4FC3F7",
-        fontSize: 14,
+        fontSize: 13,
         fontWeight: "bold",
     },
 });

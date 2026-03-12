@@ -6,6 +6,7 @@ import android.opengl.GLSurfaceView
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.view.MotionEvent
 import android.view.Surface
 import android.widget.FrameLayout
 import androidx.media3.common.MediaItem
@@ -66,8 +67,17 @@ class VRPlayerView(context: Context) : FrameLayout(context) {
 
         glSurfaceView.setRenderer(renderer)
         glSurfaceView.renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
+
+        // 关键：GLSurfaceView 不拦截任何触摸事件，全部透传给 React Native 层
+        // 否则 RN 的 Modal、控制条按钮全部失效
+        glSurfaceView.setOnTouchListener { _, _ -> false }
+
         addView(glSurfaceView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
     }
+
+    // 同样透传触摸事件，不消费
+    override fun onTouchEvent(event: MotionEvent): Boolean = false
+    override fun onInterceptTouchEvent(ev: MotionEvent): Boolean = false
 
     // ===== Props from React Native =====
 
