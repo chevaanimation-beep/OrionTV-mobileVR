@@ -1,4 +1,4 @@
-import React, { useRef, useCallback } from "react";
+import React, { useRef, useCallback, useState, useEffect } from "react";
 import { View, Text, StyleSheet, Pressable, TouchableOpacity, PanResponder, LayoutChangeEvent } from "react-native";
 import { Pause, Play, SkipForward, List, Tv, ArrowDownToDot, ArrowUpFromDot, Gauge, ArrowLeft, Glasses, Settings, Lock, LockOpen, RotateCcw } from "lucide-react-native";
 import { ThemedText } from "@/components/ThemedText";
@@ -109,17 +109,51 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({ showControls, se
     router.back();
   }, [router]);
 
+  // ===== Lock screen auto-hide logic =====
+  const [showUnlockBtn, setShowUnlockBtn] = useState(false);
+  const unlockTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    if (isLocked) {
+      setShowUnlockBtn(true);
+      if (unlockTimerRef.current) clearTimeout(unlockTimerRef.current);
+      unlockTimerRef.current = setTimeout(() => setShowUnlockBtn(false), 2000);
+    } else {
+      setShowUnlockBtn(false);
+      if (unlockTimerRef.current) clearTimeout(unlockTimerRef.current);
+    }
+    return () => {
+      if (unlockTimerRef.current) clearTimeout(unlockTimerRef.current);
+    };
+  }, [isLocked]);
+
+  const handleLockedScreenTap = useCallback(() => {
+    if (!showUnlockBtn) {
+      // 如果当前没显示解锁按钮，点击屏幕则唤出按钮并重新计时 2 秒
+      setShowUnlockBtn(true);
+      if (unlockTimerRef.current) clearTimeout(unlockTimerRef.current);
+      unlockTimerRef.current = setTimeout(() => setShowUnlockBtn(false), 2000);
+    }
+  }, [showUnlockBtn]);
+
   // ===== Lock screen overlay =====
   if (isLocked) {
     return (
       <View style={mobileStyles.lockedOverlay} pointerEvents="box-none">
         <TouchableOpacity
-          style={mobileStyles.unlockBtn}
-          onPress={() => setIsLocked(false)}
-          hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
-        >
-          <Lock color="rgba(255,255,255,0.7)" size={28} />
-        </TouchableOpacity>
+          style={StyleSheet.absoluteFillObject}
+          activeOpacity={1}
+          onPress={handleLockedScreenTap}
+        />
+        {showUnlockBtn && (
+          <TouchableOpacity
+            style={mobileStyles.unlockBtn}
+            onPress={() => setIsLocked(false)}
+            hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+          >
+            <Lock color="rgba(255,255,255,0.7)" size={28} />
+          </TouchableOpacity>
+        )}
       </View>
     );
   }

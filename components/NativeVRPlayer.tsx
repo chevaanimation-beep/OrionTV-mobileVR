@@ -63,7 +63,8 @@ export const NativeVRPlayer = forwardRef<NativeVRPlayerRef, NativeVRPlayerProps>
             (command: string, args: any[] = []) => {
                 const handle = findNodeHandle(nativeRef.current);
                 if (handle != null) {
-                    UIManager.dispatchViewManagerCommand(handle, command, args);
+                    const commandId = UIManager.getViewManagerConfig("NativeVRPlayer").Commands[command];
+                    UIManager.dispatchViewManagerCommand(handle, commandId ?? command, args);
                 }
             },
             []

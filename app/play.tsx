@@ -156,10 +156,11 @@ export default function PlayScreen() {
   // ===== 屏幕尺寸（用于旋转变换计算）=====
   const { width: screenW, height: screenH } = useWindowDimensions();
 
-  // ===== 亮度手势：左侧上下滑动 =====
   const [brightnessOverlay, setBrightnessOverlay] = useState<number | null>(null);
   const brightnessTimerRef = useRef<NodeJS.Timeout | null>(null);
   const startBrightness = useRef(0.5);
+  // 记录是否正在滑动，防止误触屏幕唤出进度条
+  const isSwipingRef = useRef(false);
 
   const brightnessPanResponder = useRef(
     PanResponder.create({
@@ -171,19 +172,30 @@ export default function PlayScreen() {
         return evt.nativeEvent.pageX < screenW * 0.25;
       },
       onPanResponderGrant: () => {
+        isSwipingRef.current = true;
         NativeModules.BrightnessModule?.getBrightness((v: number) => {
           startBrightness.current = v;
         });
       },
       onPanResponderMove: (_, gestureState) => {
-        // 上滑增亮，下滑减暗；滑动整屏高度 = 从 0 到 1
-        const delta = -gestureState.dy / screenH;
-        const newBrightness = Math.max(0.02, Math.min(1, startBrightness.current + delta));
-        NativeModules.BrightnessModule?.setBrightness(newBrightness);
-        setBrightnessOverlay(newBrightness);
-        if (brightnessTimerRef.current) clearTimeout(brightnessTimerRef.current);
-        brightnessTimerRef.current = setTimeout(() => setBrightnessOverlay(null), 1500);
+        // 只有滑过了哪怕一点距离，才被认为是有效的滑动
+        if (Math.abs(gestureState.dy) > 10) {
+          isSwipingRef.current = true;
+          // 上滑增亮，下滑减暗；滑动整屏高度 = 从 0 到 1
+          const delta = -gestureState.dy / screenH;
+          const newBrightness = Math.max(0.02, Math.min(1, startBrightness.current + delta));
+          NativeModules.BrightnessModule?.setBrightness(newBrightness);
+          setBrightnessOverlay(newBrightness);
+          if (brightnessTimerRef.current) clearTimeout(brightnessTimerRef.current);
+          brightnessTimerRef.current = setTimeout(() => setBrightnessOverlay(null), 1500);
+        }
       },
+      onPanResponderRelease: () => {
+        setTimeout(() => { isSwipingRef.current = false; }, 100);
+      },
+      onPanResponderTerminate: () => {
+        setTimeout(() => { isSwipingRef.current = false; }, 100);
+      }
     })
   ).current;
 
@@ -231,6 +243,8 @@ export default function PlayScreen() {
 
   // 优化的屏幕点击处理
   const onScreenPress = useCallback(() => {
+    if (isSwipingRef.current) return;
+
     if (deviceType === "tv") {
       tvRemoteHandler.onScreenPress();
     } else {
@@ -311,12 +325,18 @@ export default function PlayScreen() {
         activeOpacity={1}
         style={[
           dynamicStyles.videoContainer,
+          // 修复横竖屏 CSS 旋转：使用绝对居中再旋转，可以保证不受父容器 flex bounds 影响而裁剪或错位
           isRotated && {
-            transform: [{ rotate: '90deg' }],
-            width: screenH,
-            height: screenW,
-            marginTop: (screenW - screenH) / 2,
-            marginLeft: (screenH - screenW) / 2,
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            width: screenH, // width becomes the longer dimension
+            height: screenW, // height becomes the shorter dimension
+            transform: [
+              { translateX: -screenH / 2 },
+              { translateY: -screenW / 2 },
+              { rotate: '90deg' }
+            ],
           }
         ]}
         onPress={onScreenPress}
