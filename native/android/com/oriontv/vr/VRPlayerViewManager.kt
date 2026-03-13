@@ -87,6 +87,13 @@ class VRPlayerViewManager : SimpleViewManager<VRPlayerView>() {
         if (paused) view.pause() else view.play()
     }
 
+    @ReactProp(name = "seekTo", defaultDouble = -1.0)
+    fun setSeekTo(view: VRPlayerView, positionMs: Double) {
+        if (positionMs >= 0) {
+            view.seekTo(positionMs.toLong())
+        }
+    }
+
     // ===== Events =====
 
     override fun getExportedCustomDirectEventTypeConstants(): Map<String, Any>? {

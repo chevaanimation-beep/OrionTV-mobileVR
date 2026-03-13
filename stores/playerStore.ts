@@ -27,6 +27,8 @@ interface PlayerState {
   showVRSettingsModal: boolean;
   isLocked: boolean;
   isRotated: boolean;
+  isPaused: boolean;
+  seekCommand: number;
   isSeeking: boolean;
   seekPosition: number;
   progressPosition: number;
@@ -69,6 +71,7 @@ interface PlayerState {
   setVRGap: (gap: number) => void;
   setVRDistortionK1: (k1: number) => void;
   setVRDistortionK2: (k2: number) => void;
+  setSeekCommand: (positionMs: number) => void;
   _seekTimeout?: NodeJS.Timeout;
   _isRecordSaveThrottled: boolean;
   // Internal helper
@@ -90,6 +93,8 @@ const usePlayerStore = create<PlayerState>((set, get) => ({
   showVRSettingsModal: false,
   isLocked: false,
   isRotated: false,
+  isPaused: false,
+  seekCommand: -1,
   isSeeking: false,
   seekPosition: 0,
   progressPosition: 0,
@@ -281,7 +286,11 @@ const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   togglePlayPause: async () => {
-    const { status, videoRef } = get();
+    const { status, videoRef, vrSBSMode, isPaused } = get();
+    if (vrSBSMode) {
+      set({ isPaused: !isPaused });
+      return;
+    }
     if (status?.isLoaded) {
       try {
         if (status.isPlaying) {
@@ -297,15 +306,20 @@ const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   seek: async (duration) => {
-    const { status, videoRef } = get();
+    const { status, videoRef, vrSBSMode } = get();
     if (!status?.isLoaded || !status.durationMillis) return;
 
     const newPosition = Math.max(0, Math.min(status.positionMillis + duration, status.durationMillis));
-    try {
-      await videoRef?.current?.setPositionAsync(newPosition);
-    } catch (error) {
-      logger.debug("Failed to seek video:", error);
-      Toast.show({ type: "error", text1: "快进/快退失败" });
+
+    if (vrSBSMode) {
+      set({ seekCommand: newPosition });
+    } else {
+      try {
+        await videoRef?.current?.setPositionAsync(newPosition);
+      } catch (error) {
+        logger.debug("Failed to seek video:", error);
+        Toast.show({ type: "error", text1: "快进/快退失败" });
+      }
     }
 
     set({
@@ -465,6 +479,7 @@ const usePlayerStore = create<PlayerState>((set, get) => ({
   setVRGap: (gap) => set({ vrGap: Math.max(-600, Math.min(600, gap)) }),
   setVRDistortionK1: (k1) => set({ vrDistortionK1: Math.max(0, Math.min(0.5, k1)) }),
   setVRDistortionK2: (k2) => set({ vrDistortionK2: Math.max(0, Math.min(0.3, k2)) }),
+  setSeekCommand: (positionMs) => set({ seekCommand: positionMs }),
 
   setPlaybackRate: async (rate) => {
     const { videoRef } = get();

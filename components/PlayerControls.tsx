@@ -45,6 +45,8 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({ showControls, se
     setIsLocked,
     isRotated,
     setIsRotated,
+    isPaused,
+    setSeekCommand,
     videoRef,
   } = usePlayerStore();
 
@@ -84,13 +86,13 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({ showControls, se
     if (!status?.isLoaded || !status.durationMillis || progressBarWidth.current <= 0) return;
     const ratio = Math.max(0, Math.min(1, locationX / progressBarWidth.current));
     const newPositionMs = Math.floor(ratio * status.durationMillis);
-    if (vrSBSMode && vrPlayerRef?.current) {
-      // VR 模式：走原生播放器的 seekTo 命令
-      vrPlayerRef.current.seekTo(newPositionMs);
+    if (vrSBSMode) {
+      // VR 模式：通过状态管理修改 seekCommand prop 触发原生 seekTo
+      setSeekCommand(newPositionMs);
     } else {
       videoRef?.current?.setPositionAsync(newPositionMs);
     }
-  }, [status, videoRef, vrSBSMode, vrPlayerRef]);
+  }, [status, videoRef, vrSBSMode, setSeekCommand]);
 
   const progressPanResponder = useRef(
     PanResponder.create({
@@ -202,10 +204,12 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({ showControls, se
           {/* Control buttons */}
           <View style={mobileStyles.controlButtons}>
             <TouchableOpacity onPress={togglePlayPause} style={mobileStyles.controlBtn}>
-              {status?.isLoaded && status.isPlaying ? (
-                <Pause color="white" size={22} />
+              {vrSBSMode ? (
+                // VR 模式下，使用 playerStore 中的 isPaused 控制
+                !isPaused ? <Pause color="white" size={22} /> : <Play color="white" size={22} />
               ) : (
-                <Play color="white" size={22} />
+                // 非 VR 模式，使用 expo-av 返回的真实 isPlaying 状态
+                status?.isLoaded && status.isPlaying ? <Pause color="white" size={22} /> : <Play color="white" size={22} />
               )}
             </TouchableOpacity>
 
@@ -297,45 +301,37 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({ showControls, se
         </ThemedText>
 
         <View style={styles.bottomControls}>
-          <MediaButton onPress={setIntroEndTime} timeLabel={introEndTime ? formatTime(introEndTime) : undefined}>
-            <ArrowDownToDot color="white" size={24} />
-          </MediaButton>
-
           <MediaButton onPress={togglePlayPause} hasTVPreferredFocus={showControls}>
-            {status?.isLoaded && status.isPlaying ? (
-              <Pause color="white" size={24} />
+            {vrSBSMode ? (
+              !isPaused ? <Pause color="white" size={24} /> : <Play color="white" size={24} />
             ) : (
-              <Play color="white" size={24} />
+              status?.isLoaded && status.isPlaying ? <Pause color="white" size={24} /> : <Play color="white" size={24} />
             )}
           </MediaButton>
 
           <MediaButton onPress={onPlayNextEpisode} disabled={!hasNextEpisode}>
-            <SkipForward color={hasNextEpisode ? "white" : "#666"} size={24} />
-          </MediaButton>
-
-          <MediaButton onPress={setOutroStartTime} timeLabel={outroStartTime ? formatTime(outroStartTime) : undefined}>
-            <ArrowUpFromDot color="white" size={24} />
+            <SkipForward color={hasNextEpisode ? "white" : "#666"} size={22} />
           </MediaButton>
 
           <MediaButton onPress={() => setShowEpisodeModal(true)}>
-            <List color="white" size={24} />
-          </MediaButton>
-
-          <MediaButton onPress={() => setShowSpeedModal(true)} timeLabel={playbackRate !== 1.0 ? `${playbackRate}x` : undefined}>
-            <Gauge color="white" size={24} />
+            <List color="white" size={22} />
           </MediaButton>
 
           <MediaButton onPress={() => setShowSourceModal(true)}>
-            <Tv color="white" size={24} />
+            <Tv color="white" size={22} />
+          </MediaButton>
+
+          <MediaButton onPress={() => setShowSpeedModal(true)}>
+            <Gauge color="white" size={22} />
           </MediaButton>
 
           <MediaButton onPress={() => setVRSBSMode(!vrSBSMode)}>
-            <Glasses color={vrSBSMode ? "#4FC3F7" : "white"} size={24} />
+            <Glasses color={vrSBSMode ? "#FFD700" : "white"} size={22} />
           </MediaButton>
 
           {vrSBSMode && (
             <MediaButton onPress={() => setShowVRSettingsModal(true)}>
-              <Settings color="white" size={24} />
+              <Settings color="white" size={22} />
             </MediaButton>
           )}
         </View>

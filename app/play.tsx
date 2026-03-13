@@ -127,6 +127,8 @@ export default function PlayScreen() {
     setShowVRSettingsModal,
     isLocked,
     isRotated,
+    isPaused,
+    seekCommand,
     setVideoRef,
     handlePlaybackStatusUpdate,
     setShowControls,
@@ -353,7 +355,8 @@ export default function PlayScreen() {
             gap={vrGap}
             distortionK1={vrDistortionK1}
             distortionK2={vrDistortionK2}
-            paused={false}
+            paused={isPaused}
+            seekTo={seekCommand}
             style={StyleSheet.absoluteFillObject}
             onVRStatusUpdate={(e) => {
               // 将原生 VR 播放器的播放状态同步到 playerStore

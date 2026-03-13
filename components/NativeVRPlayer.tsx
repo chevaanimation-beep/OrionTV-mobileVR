@@ -17,6 +17,7 @@ interface NativeVRPlayerProps {
     distortionK2?: number;
     sbs3dMode?: boolean;
     paused?: boolean;
+    seekTo?: number;
     style?: ViewStyle;
     onVRStatusUpdate?: (event: {
         nativeEvent: {
