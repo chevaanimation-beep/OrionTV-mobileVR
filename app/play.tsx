@@ -356,7 +356,24 @@ export default function PlayScreen() {
             paused={false}
             style={StyleSheet.absoluteFillObject}
             onVRStatusUpdate={(e) => {
-              // 可以将原生播放器的状态同步到 playerStore
+              // 将原生 VR 播放器的播放状态同步到 playerStore
+              // 构造一个与 expo-av AVPlaybackStatus 兼容的对象
+              const { position, duration, isPlaying } = e.nativeEvent;
+              if (duration > 0) {
+                handlePlaybackStatusUpdate({
+                  isLoaded: true,
+                  uri: currentEpisode?.url || "",
+                  positionMillis: position,
+                  durationMillis: duration,
+                  isPlaying: isPlaying,
+                  isBuffering: false,
+                  rate: playbackRate,
+                  shouldPlay: true,
+                  volume: 1,
+                  isMuted: false,
+                  didJustFinish: false,
+                } as any);
+              }
             }}
           />
         ) : currentEpisode?.url ? (
