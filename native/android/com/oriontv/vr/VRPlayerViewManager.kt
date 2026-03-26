@@ -13,9 +13,9 @@ import com.facebook.react.uimanager.events.RCTEventEmitter
  * React Native ViewManager 桥接
  * 将 VRPlayerView 暴露为 <NativeVRPlayer> 组件
  *
- * Props: uri, rate, scale, gap, distortionK1, distortionK2, sbs3dMode, paused
- * Events: onVRStatusUpdate
- * Commands: seekTo
+ * Props: uri, rate, scale, gap, distortionK1, distortionK2, sbs3dMode, paused, seekTo
+ * Events: onVRStatusUpdate（position, duration, isPlaying, isBuffering）
+ * Commands: seekTo, play, pause
  */
 class VRPlayerViewManager : SimpleViewManager<VRPlayerView>() {
 
@@ -31,12 +31,13 @@ class VRPlayerViewManager : SimpleViewManager<VRPlayerView>() {
     override fun createViewInstance(reactContext: ThemedReactContext): VRPlayerView {
         val view = VRPlayerView(reactContext)
 
-        // 将播放状态回调发送到 JS 层
-        view.onStatusUpdate = { positionMs, durationMs, isPlaying ->
+        // 将播放状态回调发送到 JS 层（含 isBuffering）
+        view.onStatusUpdate = { positionMs, durationMs, isPlaying, isBuffering ->
             val event: WritableMap = Arguments.createMap()
             event.putDouble("position", positionMs.toDouble())
             event.putDouble("duration", durationMs.toDouble())
             event.putBoolean("isPlaying", isPlaying)
+            event.putBoolean("isBuffering", isBuffering)
 
             reactContext.getJSModule(RCTEventEmitter::class.java)
                 .receiveEvent(view.id, "onVRStatusUpdate", event)

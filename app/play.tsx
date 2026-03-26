@@ -361,7 +361,7 @@ export default function PlayScreen() {
             onVRStatusUpdate={(e) => {
               // 将原生 VR 播放器的播放状态同步到 playerStore
               // 构造一个与 expo-av AVPlaybackStatus 兼容的对象
-              const { position, duration, isPlaying } = e.nativeEvent;
+              const { position, duration, isPlaying, isBuffering } = e.nativeEvent;
               if (duration > 0) {
                 handlePlaybackStatusUpdate({
                   isLoaded: true,
@@ -369,7 +369,7 @@ export default function PlayScreen() {
                   positionMillis: position,
                   durationMillis: duration,
                   isPlaying: isPlaying,
-                  isBuffering: false,
+                  isBuffering: isBuffering, // 使用原生层上报的真实缓冲状态
                   rate: playbackRate,
                   shouldPlay: true,
                   volume: 1,

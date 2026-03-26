@@ -430,6 +430,12 @@ const usePlayerStore = create<PlayerState>((set, get) => ({
       return;
     }
 
+    // VR 模式下，将实际的缓冲状态同步到 isLoading，驱动加载动画显示/隐藏
+    const { vrSBSMode } = get();
+    if (vrSBSMode && newStatus.isBuffering !== undefined) {
+      set({ isLoading: !!newStatus.isBuffering });
+    }
+
     const { currentEpisodeIndex, episodes, outroStartTime, playEpisode } = get();
     const detail = useDetailStore.getState().detail;
 
@@ -474,7 +480,27 @@ const usePlayerStore = create<PlayerState>((set, get) => ({
   setShowVRSettingsModal: (show) => set({ showVRSettingsModal: show }),
   setIsLocked: (locked) => set({ isLocked: locked }),
   setIsRotated: (rotated) => set({ isRotated: rotated }),
-  setVRSBSMode: (enabled) => set({ vrSBSMode: enabled }),
+  setVRSBSMode: (enabled) => {
+    const { status } = get();
+    // 获取当前播放位置（ms），用于模式切换时继承进度
+    const currentPositionMs = status?.isLoaded ? Math.floor(status.positionMillis) : 0;
+
+    if (enabled) {
+      // 普通 → VR：将当前位置写入 seekCommand，VR 播放器初始化后会 seek 到此处
+      set({
+        vrSBSMode: true,
+        seekCommand: currentPositionMs,
+      });
+    } else {
+      // VR → 普通：将 VR 的最后位置写入 initialPosition
+      // Video 组件重新挂载时，onLoad 会自动 seek 到此处
+      set({
+        vrSBSMode: false,
+        initialPosition: currentPositionMs,
+        isLoading: true, // 触发普通播放器的加载动画
+      });
+    }
+  },
   setVRScale: (scale) => set({ vrScale: Math.max(50, Math.min(100, scale)) }),
   setVRGap: (gap) => set({ vrGap: Math.max(-600, Math.min(600, gap)) }),
   setVRDistortionK1: (k1) => set({ vrDistortionK1: Math.max(0, Math.min(0.5, k1)) }),

@@ -24,6 +24,7 @@ interface NativeVRPlayerProps {
             position: number;
             duration: number;
             isPlaying: boolean;
+            isBuffering: boolean; // 新增：实际缓冲状态
         };
     }) => void;
 }
