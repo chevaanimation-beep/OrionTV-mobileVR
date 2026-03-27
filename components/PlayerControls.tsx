@@ -249,13 +249,15 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({ showControls, se
               </TouchableOpacity>
             )}
 
-            {/* 旋转按鈕：90度旋转屏幕（模拟横竖屏切换） */}
-            <TouchableOpacity
-              onPress={() => setIsRotated(!isRotated)}
-              style={[mobileStyles.controlBtn, isRotated && mobileStyles.activeBtn]}
-            >
-              <RotateCcw color={isRotated ? "#4FC3F7" : "white"} size={20} />
-            </TouchableOpacity>
+            {/* 旋转按钮：VR 模式下强制横屏，隐藏此按钮 */}
+            {!vrSBSMode && (
+              <TouchableOpacity
+                onPress={() => setIsRotated(!isRotated)}
+                style={[mobileStyles.controlBtn, isRotated && mobileStyles.activeBtn]}
+              >
+                <RotateCcw color={isRotated ? "#4FC3F7" : "white"} size={20} />
+              </TouchableOpacity>
+            )}
 
             {/* 锁屏按鈕 */}
             <TouchableOpacity

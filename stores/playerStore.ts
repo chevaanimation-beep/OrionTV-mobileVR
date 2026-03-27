@@ -487,9 +487,11 @@ const usePlayerStore = create<PlayerState>((set, get) => ({
 
     if (enabled) {
       // 普通 → VR：将当前位置写入 seekCommand，VR 播放器初始化后会 seek 到此处
+      // 同时重置旋转状态：VR 模式只支持横屏，不受手动旋转影响
       set({
         vrSBSMode: true,
         seekCommand: currentPositionMs,
+        isRotated: false,
       });
     } else {
       // VR → 普通：将 VR 的最后位置写入 initialPosition

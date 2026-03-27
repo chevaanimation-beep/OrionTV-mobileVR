@@ -98,12 +98,14 @@ export default function PlayScreen() {
     source: sourceStr,
     id: videoId,
     title: videoTitle,
+    localPath,
   } = useLocalSearchParams<{
     episodeIndex: string;
     position?: string;
     source?: string;
     id?: string;
     title?: string;
+    localPath?: string;
   }>();
   const episodeIndex = parseInt(episodeIndexStr || "0", 10);
   const position = positionStr ? parseInt(positionStr, 10) : undefined;
@@ -227,7 +229,17 @@ export default function PlayScreen() {
     logger.info(`[PERF] PlayScreen useEffect START - source: ${source}, id: ${id}, title: ${title}`);
 
     setVideoRef(videoRef);
-    if (source && id && title) {
+
+    // Offline playback: if localPath provided, inject it directly as the episode URL
+    if (localPath) {
+      logger.info(`[OFFLINE] Playing from local cache: ${localPath}`);
+      usePlayerStore.setState({
+        isLoading: false,
+        currentEpisodeIndex: episodeIndex,
+        initialPosition: 0,
+        episodes: [{ url: localPath, title: title || `第 ${episodeIndex + 1} 集` }],
+      });
+    } else if (source && id && title) {
       logger.info(`[PERF] Calling loadVideo with episodeIndex: ${episodeIndex}, position: ${position}`);
       loadVideo({ source, id, episodeIndex, position, title });
     } else {
@@ -241,7 +253,7 @@ export default function PlayScreen() {
       logger.info(`[PERF] PlayScreen unmounting - calling reset()`);
       reset(); // Reset state when component unmounts
     };
-  }, [episodeIndex, source, position, setVideoRef, reset, loadVideo, id, title]);
+  }, [episodeIndex, source, position, setVideoRef, reset, loadVideo, id, title, localPath]);
 
   // 优化的屏幕点击处理
   const onScreenPress = useCallback(() => {
@@ -314,7 +326,8 @@ export default function PlayScreen() {
 
   // VR SBS 同步不再需要 — 原生 OpenGL 渲染器通过单一解码器实现帧级同步
 
-  if (!detail) {
+  // When playing locally cached content, we don't need detail from network
+  if (!localPath && !detail) {
     return <VideoLoadingAnimation showProgressBar />;
   }
 
@@ -327,8 +340,8 @@ export default function PlayScreen() {
         activeOpacity={1}
         style={[
           dynamicStyles.videoContainer,
-          // 修复横竖屏 CSS 旋转：使用绝对居中再旋转，可以保证不受父容器 flex bounds 影响而裁剪或错位
-          isRotated && {
+          // VR 模式下固定横屏，不允许旋转；非 VR 模式才应用手动旋转变换
+          !vrSBSMode && isRotated && {
             position: 'absolute',
             top: '50%',
             left: '50%',

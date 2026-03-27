@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { View, Text, StyleSheet, Image, ScrollView, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet, Image, ScrollView, ActivityIndicator, TouchableOpacity } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ThemedView } from "@/components/ThemedView";
 import { ThemedText } from "@/components/ThemedText";
@@ -11,6 +11,9 @@ import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
 import { getCommonResponsiveStyles } from "@/utils/ResponsiveStyles";
 import ResponsiveNavigation from "@/components/navigation/ResponsiveNavigation";
 import ResponsiveHeader from "@/components/navigation/ResponsiveHeader";
+import useDownloadStore from "@/stores/downloadStore";
+import { Download, CheckCircle } from "lucide-react-native";
+import Toast from "react-native-toast-message";
 
 export default function DetailScreen() {
   const { q, source, id } = useLocalSearchParams<{ q: string; source?: string; id?: string }>();
@@ -34,6 +37,14 @@ export default function DetailScreen() {
     toggleFavorite,
   } = useDetailStore();
 
+  const {
+    startDownload,
+    isEpisodeDownloaded,
+    isEpisodeDownloading,
+    getEpisodeDownloadProgress,
+    loadDownloads,
+  } = useDownloadStore();
+
   useEffect(() => {
     if (q) {
       init(q, source, id);
@@ -42,6 +53,35 @@ export default function DetailScreen() {
       abort();
     };
   }, [abort, init, q, source, id]);
+
+  useEffect(() => {
+    loadDownloads();
+  }, [loadDownloads]);
+
+  const handleDownloadEpisode = (episodeIndex: number) => {
+    if (!detail) return;
+    const url = detail.episodes[episodeIndex];
+    if (!url) return;
+
+    const episodeLabel = detail.episodes.length === 1 ? detail.title : `第 ${episodeIndex + 1} 集`;
+
+    startDownload(
+      {
+        source: detail.source,
+        id: detail.id.toString(),
+        title: detail.title,
+        poster: detail.poster,
+        year: detail.year || '',
+        typeName: detail.type_name || '',
+        sourceName: detail.source_name,
+      },
+      episodeIndex,
+      url,
+      episodeLabel,
+    );
+
+    Toast.show({ type: 'info', text1: '已加入下载队列', text2: `${detail.title} ${episodeLabel}` });
+  };
 
   const handlePlay = (episodeIndex: number) => {
     if (!detail) return;
@@ -177,15 +217,34 @@ export default function DetailScreen() {
           <View style={dynamicStyles.episodesContainer}>
             <ThemedText style={dynamicStyles.episodesTitle}>播放列表</ThemedText>
             <View style={dynamicStyles.episodeList}>
-              {detail.episodes.map((episode, index) => (
-                <StyledButton
-                  key={index}
-                  style={dynamicStyles.episodeButton}
-                  onPress={() => handlePlay(index)}
-                  text={`第 ${index + 1} 集`}
-                  textStyle={dynamicStyles.episodeButtonText}
-                />
-              ))}
+              {detail.episodes.map((episode, index) => {
+                const downloaded = isEpisodeDownloaded(detail.source, detail.id.toString(), index);
+                const downloading = isEpisodeDownloading(detail.source, detail.id.toString(), index);
+                const progress = getEpisodeDownloadProgress(detail.source, detail.id.toString(), index);
+                return (
+                  <View key={index} style={dynamicStyles.episodeRow}>
+                    <StyledButton
+                      style={dynamicStyles.episodeButton}
+                      onPress={() => handlePlay(index)}
+                      text={`第 ${index + 1} 集`}
+                      textStyle={dynamicStyles.episodeButtonText}
+                    />
+                    <TouchableOpacity
+                      style={dynamicStyles.dlBtn}
+                      onPress={() => !downloaded && !downloading && handleDownloadEpisode(index)}
+                      activeOpacity={0.7}
+                    >
+                      {downloaded ? (
+                        <CheckCircle size={14} color="#34C759" />
+                      ) : downloading ? (
+                        <Text style={dynamicStyles.dlProgress}>{Math.round(progress * 100)}%</Text>
+                      ) : (
+                        <Download size={14} color="#888" />
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
             </View>
           </View>
         </ScrollView>
@@ -258,15 +317,34 @@ export default function DetailScreen() {
             <View style={dynamicStyles.episodesContainer}>
               <ThemedText style={dynamicStyles.episodesTitle}>播放列表</ThemedText>
               <ScrollView contentContainerStyle={dynamicStyles.episodeList}>
-                {detail.episodes.map((episode, index) => (
-                  <StyledButton
-                    key={index}
-                    style={dynamicStyles.episodeButton}
-                    onPress={() => handlePlay(index)}
-                    text={`第 ${index + 1} 集`}
-                    textStyle={dynamicStyles.episodeButtonText}
-                  />
-                ))}
+                {detail.episodes.map((episode, index) => {
+                  const downloaded = isEpisodeDownloaded(detail.source, detail.id.toString(), index);
+                  const downloading = isEpisodeDownloading(detail.source, detail.id.toString(), index);
+                  const progress = getEpisodeDownloadProgress(detail.source, detail.id.toString(), index);
+                  return (
+                    <View key={index} style={dynamicStyles.episodeRow}>
+                      <StyledButton
+                        style={dynamicStyles.episodeButton}
+                        onPress={() => handlePlay(index)}
+                        text={`第 ${index + 1} 集`}
+                        textStyle={dynamicStyles.episodeButtonText}
+                      />
+                      <TouchableOpacity
+                        style={dynamicStyles.dlBtn}
+                        onPress={() => !downloaded && !downloading && handleDownloadEpisode(index)}
+                        activeOpacity={0.7}
+                      >
+                        {downloaded ? (
+                          <CheckCircle size={14} color="#34C759" />
+                        ) : downloading ? (
+                          <Text style={dynamicStyles.dlProgress}>{Math.round(progress * 100)}%</Text>
+                        ) : (
+                          <Download size={14} color="#888" />
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })}
               </ScrollView>
             </View>
           </View>
@@ -437,13 +515,29 @@ const createResponsiveStyles = (deviceType: string, spacing: number) => {
       flexDirection: "row",
       flexWrap: "wrap",
     },
-    episodeButton: {
+    episodeRow: {
+      flexDirection: "row",
+      alignItems: "center",
       margin: isMobile ? 3 : 5,
+    },
+    episodeButton: {
       minHeight: isMobile ? 32 : 36,
     },
     episodeButtonText: {
       color: "white",
       fontSize: isMobile ? 12 : 14,
+    },
+    dlBtn: {
+      width: 24,
+      height: 24,
+      alignItems: "center",
+      justifyContent: "center",
+      marginLeft: 4,
+    },
+    dlProgress: {
+      fontSize: 9,
+      color: "#409CFF",
+      fontWeight: "bold",
     },
   });
 };
