@@ -6,7 +6,7 @@ import {
   createDownloadResumable,
   DownloadResumable,
   DownloadProgressData,
-} from 'expo-file-system/legacy';
+} from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Logger from '@/utils/Logger';
 

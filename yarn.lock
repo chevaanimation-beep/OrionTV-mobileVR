@@ -4547,11 +4547,6 @@ expo-constants@~16.0.0, expo-constants@~16.0.2:
     "@expo/config" "~9.0.0"
     "@expo/env" "~0.3.0"
 
-expo-file-system@^55.0.11:
-  version "55.0.11"
-  resolved "https://registry.yarnpkg.com/expo-file-system/-/expo-file-system-55.0.11.tgz#9be75b499363d40f1329830c685f34e55710d987"
-  integrity sha512-KMUd6OY375J9WD79ZvjvCDZMveT7YfgiGWdi58/gfuTBsr14TRuoPk8RRQHAtc4UquzWViKcHwna9aPY7/XPpw==
-
 expo-file-system@~17.0.1:
   version "17.0.1"
   resolved "https://registry.npmmirror.com/expo-file-system/-/expo-file-system-17.0.1.tgz"
