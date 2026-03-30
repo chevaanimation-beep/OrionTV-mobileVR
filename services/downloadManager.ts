@@ -6,6 +6,7 @@ import {
   createDownloadResumable,
   DownloadResumable,
   DownloadProgressData,
+  writeAsStringAsync,
 } from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Logger from '@/utils/Logger';
@@ -60,8 +61,24 @@ const ensureDownloadsDir = async () => {
   }
 };
 
-const getLocalFilePath = (source: string, id: string, episodeIndex: number) =>
-  `${DOWNLOADS_DIR}${source}_${id}_ep${episodeIndex}.mp4`;
+const getLocalFileOrDirPath = (source: string, id: string, episodeIndex: number, isM3u8: boolean = false) => {
+  if (isM3u8) {
+    // For M3U8, we return the directory path. The actual playable file is index.m3u8 inside it.
+    return `${DOWNLOADS_DIR}${source}_${id}_ep${episodeIndex}/`;
+  }
+  return `${DOWNLOADS_DIR}${source}_${id}_ep${episodeIndex}.mp4`;
+};
+
+const resolveUrl = (base: string, relative: string) => {
+  if (relative.startsWith('http')) return relative;
+  if (relative.startsWith('/')) {
+    const url = new URL(base);
+    return `${url.origin}${relative}`;
+  }
+  const parts = base.split('?')[0].split('/');
+  parts.pop();
+  return `${parts.join('/')}/${relative}`;
+};
 
 // --- Metadata persistence ---
 export const loadAllDownloadsMeta = async (): Promise<Record<string, DownloadedVideo>> => {
@@ -84,9 +101,13 @@ export const saveAllDownloadsMeta = async (meta: Record<string, DownloadedVideo>
 
 // --- Download functions ---
 
+export interface PseudoResumable {
+  cancelAsync: () => Promise<void>;
+}
+
 /**
  * Start downloading a video episode.
- * Returns the DownloadResumable handle (for cancellation) or null.
+ * Handles both standard MP4 and HLS M3U8 formats automatically.
  */
 export const startEpisodeDownload = async (
   video: {
@@ -104,64 +125,224 @@ export const startEpisodeDownload = async (
   onProgress: (progress: number) => void,
   onComplete: (localPath: string, fileSize: number) => void,
   onError: (error: string) => void,
-): Promise<DownloadResumable | null> => {
+): Promise<DownloadResumable | PseudoResumable | null> => {
   try {
     await ensureDownloadsDir();
-    const localPath = getLocalFilePath(video.source, video.id, episodeIndex);
 
-    // Check if already downloaded
-    const existingInfo = await getInfoAsync(localPath);
-    if (existingInfo.exists) {
-      const fileSize = (existingInfo as any).size ?? 0;
-      onComplete(localPath, fileSize);
-      return null;
-    }
+    // 1. Initial network check to see if it's M3U8
+    const manifestRes = await fetch(episodeUrl);
+    if (!manifestRes.ok) throw new Error('Failed to fetch video URL');
+    const manifestText = await manifestRes.text();
 
-    const downloadResumable = createDownloadResumable(
-      episodeUrl,
-      localPath,
-      {},
-      (downloadProgress: DownloadProgressData) => {
-        const progress =
-          downloadProgress.totalBytesExpectedToWrite > 0
+    const isM3u8 = manifestText.trim().startsWith('#EXTM3U');
+    
+    if (isM3u8) {
+      // ===== M3U8 DOWNLOAD LOGIC =====
+      const epDir = getLocalFileOrDirPath(video.source, video.id, episodeIndex, true);
+      const localM3u8Path = `${epDir}local.m3u8`;
+
+      // Check if already downloaded
+      const existingInfo = await getInfoAsync(localM3u8Path);
+      if (existingInfo.exists) {
+        onComplete(localM3u8Path, existingInfo.size ?? 0);
+        return null;
+      }
+
+      await makeDirectoryAsync(epDir, { intermediates: true });
+
+      let mediaManifest = manifestText;
+      let baseUrl = episodeUrl;
+
+      // Handle Master Playlist
+      if (mediaManifest.includes('#EXT-X-STREAM-INF')) {
+        const lines = mediaManifest.split('\n');
+        let variantUrl = '';
+        for (let i = 0; i < lines.length; i++) {
+          if (lines[i].startsWith('#EXT-X-STREAM-INF')) {
+            for (let j = i + 1; j < lines.length; j++) {
+              if (lines[j].trim() && !lines[j].startsWith('#')) {
+                variantUrl = resolveUrl(baseUrl, lines[j].trim());
+                break;
+              }
+            }
+            if (variantUrl) break;
+          }
+        }
+        if (variantUrl) {
+          baseUrl = variantUrl;
+          const varRes = await fetch(baseUrl);
+          mediaManifest = await varRes.text();
+        }
+      }
+
+      // Parse Segments and Keys
+      const lines = mediaManifest.split('\n');
+      const downloadTasks: { url: string; localName: string }[] = [];
+      let localManifestObj = '';
+      
+      let segIndex = 0;
+      let keyIndex = 0;
+
+      for (let line of lines) {
+        if (line.trim().length === 0) continue;
+        
+        if (line.startsWith('#EXT-X-KEY')) {
+          const match = line.match(/URI="(.*?)"/);
+          if (match && match[1]) {
+            const keyUri = match[1];
+            if (!keyUri.startsWith('data:')) {
+              const keyUrl = resolveUrl(baseUrl, keyUri);
+              const localKeyName = `key_${keyIndex++}.key`;
+              downloadTasks.push({ url: keyUrl, localName: localKeyName });
+              localManifestObj += line.replace(`URI="${keyUri}"`, `URI="${localKeyName}"`) + '\n';
+              continue;
+            }
+          }
+          localManifestObj += line + '\n';
+        } else if (!line.startsWith('#')) {
+          // TS Segment
+          const tsUrl = resolveUrl(baseUrl, line.trim());
+          const extMatch = tsUrl.split('?')[0].match(/\.([^.]+)$/);
+          const ext = extMatch ? extMatch[1] : 'ts';
+          const localTsName = `seg_${segIndex++}.${ext}`;
+          downloadTasks.push({ url: tsUrl, localName: localTsName });
+          localManifestObj += localTsName + '\n';
+        } else {
+          localManifestObj += line + '\n';
+        }
+      }
+
+      let cancelled = false;
+      let completedFiles = 0;
+      const totalFiles = downloadTasks.length;
+
+      const pseudoResumable: PseudoResumable = {
+        cancelAsync: async () => { cancelled = true; }
+      };
+
+      // Concurrent Downloader
+      (async () => {
+        try {
+          const CONCURRENCY = 5;
+          let taskIndex = 0;
+          
+          const workers = Array.from({ length: CONCURRENCY }, async () => {
+            while (taskIndex < downloadTasks.length) {
+              if (cancelled) break;
+              const task = downloadTasks[taskIndex++];
+              const destPath = `${epDir}${task.localName}`;
+              
+              // Skip if already exists (partial resume support)
+              const existing = await getInfoAsync(destPath);
+              if (!existing.exists || (existing as { size: number }).size === 0) {
+                try {
+                  const dl = createDownloadResumable(task.url, destPath);
+                  await dl.downloadAsync();
+                } catch (e) {
+                  logger.error(`Failed to download segment: ${task.url}`, e);
+                }
+              }
+              completedFiles++;
+              onProgress(Math.min(completedFiles / totalFiles, 1));
+            }
+          });
+
+          await Promise.all(workers);
+
+          if (cancelled) {
+            // Cleanup on cancel to save space
+            await deleteAsync(epDir, { idempotent: true });
+            return;
+          }
+
+          // Write local m3u8 file
+          await writeAsStringAsync(localM3u8Path, localManifestObj);
+
+          // Calculate total space
+          let totalSize = 0;
+          for (const t of downloadTasks) {
+            try {
+              const s = await getInfoAsync(`${epDir}${t.localName}`);
+              if (s.exists) totalSize += (s as { size: number }).size ?? 0;
+            } catch (e) {}
+          }
+
+          logger.info(`M3U8 download complete: ${totalFiles} files, ${formatBytes(totalSize)}`);
+          onComplete(localM3u8Path, totalSize);
+        } catch (e) {
+          const errMsg = e instanceof Error ? e.message : '下载失败';
+          onError(errMsg);
+        }
+      })();
+
+      return pseudoResumable;
+
+    } else {
+      // ===== STANDARD MP4 DOWNLOAD LOGIC =====
+      const localPath = getLocalFileOrDirPath(video.source, video.id, episodeIndex, false);
+
+      const existingInfo = await getInfoAsync(localPath);
+      if (existingInfo.exists) {
+        onComplete(localPath, existingInfo.size ?? 0);
+        return null;
+      }
+
+      const downloadResumable = createDownloadResumable(
+        episodeUrl,
+        localPath,
+        {},
+        (downloadProgress: DownloadProgressData) => {
+          const progress = downloadProgress.totalBytesExpectedToWrite > 0
             ? downloadProgress.totalBytesWritten / downloadProgress.totalBytesExpectedToWrite
             : 0;
-        onProgress(Math.min(progress, 1));
-      },
-    );
+          onProgress(Math.min(progress, 1));
+        },
+      );
 
-    const result = await downloadResumable.downloadAsync();
-    if (result) {
-      const fileInfo = await getInfoAsync(result.uri);
-      const fileSize = (fileInfo as any).size ?? 0;
-      onComplete(result.uri, fileSize);
+      downloadResumable.downloadAsync().then(async (result) => {
+        if (result) {
+          const fileInfo = await getInfoAsync(result.uri);
+          onComplete(result.uri, (fileInfo as { size: number }).size ?? 0);
+        }
+      }).catch((e) => {
+        onError(e.message);
+      });
+
+      return downloadResumable;
     }
 
-    return downloadResumable;
   } catch (e) {
-    const errMsg = e instanceof Error ? e.message : '下载失败';
-    logger.error(`Download error for ep${episodeIndex}:`, e);
+    const errMsg = e instanceof Error ? e.message : '解析下载地址失败';
+    logger.error(`Start download error for ep${episodeIndex}:`, e);
     onError(errMsg);
     return null;
   }
 };
 
 /**
- * Delete a downloaded episode file.
+ * Delete a downloaded episode file or M3U8 directory.
  */
 export const deleteEpisodeDownload = async (
   source: string,
   id: string,
   episodeIndex: number,
 ): Promise<void> => {
-  const localPath = getLocalFilePath(source, id, episodeIndex);
   try {
-    const info = await getInfoAsync(localPath);
-    if (info.exists) {
-      await deleteAsync(localPath, { idempotent: true });
+    // Try deleting M3U8 directory first
+    const dirPath = getLocalFileOrDirPath(source, id, episodeIndex, true);
+    const dirInfo = await getInfoAsync(dirPath);
+    if (dirInfo.exists) {
+      await deleteAsync(dirPath, { idempotent: true });
+    }
+
+    // Try deleting standard MP4 file
+    const filePath = getLocalFileOrDirPath(source, id, episodeIndex, false);
+    const fileInfo = await getInfoAsync(filePath);
+    if (fileInfo.exists) {
+      await deleteAsync(filePath, { idempotent: true });
     }
   } catch (e) {
-    logger.error(`Failed to delete episode file:`, e);
+    logger.error(`Failed to delete episode:`, e);
   }
 };
 

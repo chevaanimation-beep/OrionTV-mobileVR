@@ -8,9 +8,10 @@ import {
   loadAllDownloadsMeta,
   persistEpisodeDownload,
   removeEpisodeFromMeta,
-  deleteVideoDownload,
   startEpisodeDownload,
+  deleteVideoDownload,
   formatBytes,
+  PseudoResumable,
 } from '@/services/downloadManager';
 import Logger from '@/utils/Logger';
 
@@ -51,7 +52,7 @@ interface DownloadStore {
   getLocalEpisodePath: (source: string, id: string, episodeIndex: number) => string | null;
 
   // Internal: cancellation registry
-  _resumables: Record<string, DownloadResumable | null>;
+  _resumables: Record<string, DownloadResumable | PseudoResumable | null>;
 }
 
 const useDownloadStore = create<DownloadStore>((set, get) => ({
