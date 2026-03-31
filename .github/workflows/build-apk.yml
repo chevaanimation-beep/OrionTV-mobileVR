@@ -157,13 +157,13 @@ jobs:
           body: |
             **OrionTV v${{ steps.package-version.outputs.version }}**
 
-            ### 🚀 本次更新内容
-            - **离线缓存（M3U8全能重构版）**：新增影视本地下载功能，完美攻克流媒体格式！
-            - 🛠️ **断点并发引擎**：多线程并发拉取 TS 切片，无惧断网，支持跨平台复用。
-            - 📁 **本地管理中心**：首页新增独立「缓存」Tab，直观查看体积并支持一键清理。
-            - 🥽 **零修改适配**：基于相对路径劫持，离线视频在 2D 播放器和 3D VR 播放器间均可丝滑硬解。
-            
-            > 提示：如果下载出现问题或无权限，请检查手机存储空间。
+            ### 🔧 调试版 - 离线播放修复
+            - **🐛 修复 M3U8 加密 key 路径 bug**：下载的 m3u8 manifest 中 EXT-X-KEY URI 改为绝对路径，解决 ExoPlayer 通过 local HTTP server 请求 key 文件时路径解析错误导致播放失败的问题
+            - **🔍 详细调试日志（LocalServerModule）**：每次 HTTP 请求均打印 URI、文件路径、是否存在、文件大小，404 时列出父目录内容，方便 logcat 排查
+            - **🔍 详细调试日志（play.tsx）**：打印 localPath 原始值、cleanPath、最终 proxyUrl，覆盖路径处理每一步
+            - **🛠️ 路径处理改进**：使用 `slice('file://'.length)` 替代 `replace('file://', '')`，避免路径中包含 file:// 字样被误替换
+
+            > 安装后请重新下载一剧集（旧缓存的 key 路径格式有误），然后用 logcat 过滤 `LocalServerModule` 和 `PlayScreen` 查看日志。
           draft: false
           prerelease: false
           files: artifacts/orionTV.${{ steps.package-version.outputs.version }}.apk

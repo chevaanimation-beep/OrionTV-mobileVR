@@ -193,8 +193,13 @@ export const startEpisodeDownload = async (
             if (!keyUri.startsWith('data:')) {
               const keyUrl = resolveUrl(baseUrl, keyUri);
               const localKeyName = `key_${keyIndex++}.key`;
+              const localKeyAbsPath = `${epDir}${localKeyName}`;
               downloadTasks.push({ url: keyUrl, localName: localKeyName });
-              localManifestObj += line.replace(`URI="${keyUri}"`, `URI="${localKeyName}"`) + '\n';
+              // Use absolute local path in the manifest so ExoPlayer (via HTTP proxy)
+              // can request it as http://127.0.0.1:PORT/data/user/0/.../key_x.key
+              // (relative paths would resolve incorrectly relative to the m3u8 URL)
+              localManifestObj += line.replace(`URI="${keyUri}"`, `URI="${localKeyAbsPath.replace('file://', '')}"`) + '\n';
+              logger.info(`[DownloadManager] EXT-X-KEY: replaced URI "${keyUri}" -> abs path "${localKeyAbsPath}"`);
               continue;
             }
           }

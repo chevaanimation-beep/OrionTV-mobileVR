@@ -232,13 +232,21 @@ export default function PlayScreen() {
 
     // Offline playback: if localPath provided, inject it directly as the episode URL
     if (localPath) {
+      logger.info(`[OFFLINE] localPath raw value: "${localPath}"`);
+      logger.info(`[OFFLINE] localPath length: ${localPath.length}, platform: ${Platform.OS}`);
+      logger.info(`[OFFLINE] isM3u8: ${localPath.endsWith('.m3u8')}`);
+
       if (Platform.OS === 'android' && localPath.endsWith('.m3u8')) {
         logger.info(`[OFFLINE] Starting local server for m3u8: ${localPath}`);
         NativeModules.LocalServerModule?.startServer()
           .then((baseUrl: string) => {
-            const cleanPath = localPath.replace('file://', '');
+            logger.info(`[OFFLINE] startServer resolved with baseUrl: "${baseUrl}"`);
+            // Remove only the 'file://' prefix (leaving the leading '/'), giving an absolute filesystem path
+            // e.g. "file:///data/user/0/..." -> "/data/user/0/..."
+            const cleanPath = localPath.startsWith('file://') ? localPath.slice('file://'.length) : localPath;
+            logger.info(`[OFFLINE] cleanPath (after stripping file://): "${cleanPath}"`);
             const proxyUrl = `${baseUrl}${cleanPath}`;
-            logger.info(`[OFFLINE] Playing from local server proxy: ${proxyUrl}`);
+            logger.info(`[OFFLINE] Final proxyUrl to play: "${proxyUrl}"`);
             usePlayerStore.setState({
               isLoading: false,
               currentEpisodeIndex: episodeIndex,
@@ -247,10 +255,10 @@ export default function PlayScreen() {
             });
           })
           .catch((e: Error) => {
-            logger.error(`[OFFLINE] Failed to start local server`, e);
+            logger.error(`[OFFLINE] Failed to start local server: ${e?.message}`, e);
           });
       } else {
-        logger.info(`[OFFLINE] Playing from local cache: ${localPath}`);
+        logger.info(`[OFFLINE] Playing directly (non-m3u8 or non-android): ${localPath}`);
         usePlayerStore.setState({
           isLoading: false,
           currentEpisodeIndex: episodeIndex,
