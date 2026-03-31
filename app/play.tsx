@@ -232,13 +232,32 @@ export default function PlayScreen() {
 
     // Offline playback: if localPath provided, inject it directly as the episode URL
     if (localPath) {
-      logger.info(`[OFFLINE] Playing from local cache: ${localPath}`);
-      usePlayerStore.setState({
-        isLoading: false,
-        currentEpisodeIndex: episodeIndex,
-        initialPosition: 0,
-        episodes: [{ url: localPath, title: title || `第 ${episodeIndex + 1} 集` }],
-      });
+      if (Platform.OS === 'android' && localPath.endsWith('.m3u8')) {
+        logger.info(`[OFFLINE] Starting local server for m3u8: ${localPath}`);
+        NativeModules.LocalServerModule?.startServer()
+          .then((baseUrl: string) => {
+            const cleanPath = localPath.replace('file://', '');
+            const proxyUrl = `${baseUrl}${cleanPath}`;
+            logger.info(`[OFFLINE] Playing from local server proxy: ${proxyUrl}`);
+            usePlayerStore.setState({
+              isLoading: false,
+              currentEpisodeIndex: episodeIndex,
+              initialPosition: 0,
+              episodes: [{ url: proxyUrl, title: title || `第 ${episodeIndex + 1} 集` }],
+            });
+          })
+          .catch((e: Error) => {
+            logger.error(`[OFFLINE] Failed to start local server`, e);
+          });
+      } else {
+        logger.info(`[OFFLINE] Playing from local cache: ${localPath}`);
+        usePlayerStore.setState({
+          isLoading: false,
+          currentEpisodeIndex: episodeIndex,
+          initialPosition: 0,
+          episodes: [{ url: localPath, title: title || `第 ${episodeIndex + 1} 集` }],
+        });
+      }
     } else if (source && id && title) {
       logger.info(`[PERF] Calling loadVideo with episodeIndex: ${episodeIndex}, position: ${position}`);
       loadVideo({ source, id, episodeIndex, position, title });
@@ -250,6 +269,9 @@ export default function PlayScreen() {
     logger.info(`[PERF] PlayScreen useEffect END - took ${(perfEnd - perfStart).toFixed(2)}ms`);
 
     return () => {
+      if (Platform.OS === 'android' && localPath && localPath.endsWith('.m3u8')) {
+        NativeModules.LocalServerModule?.stopServer();
+      }
       logger.info(`[PERF] PlayScreen unmounting - calling reset()`);
       reset(); // Reset state when component unmounts
     };
