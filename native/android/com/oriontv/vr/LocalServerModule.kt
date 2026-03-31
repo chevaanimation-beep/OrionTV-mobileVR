@@ -49,7 +49,7 @@ class LocalServerModule(reactContext: ReactApplicationContext) : ReactContextBas
             }
 
             return try {
-                val mimeType = getMimeTypeForFile(targetPath)
+                val mimeType = getCustomMimeType(targetPath)
                 val fis = FileInputStream(file)
                 NanoHTTPD.newFixedLengthResponse(NanoHTTPD.Response.Status.OK, mimeType, fis, file.length().toLong())
             } catch (e: Exception) {
@@ -57,7 +57,7 @@ class LocalServerModule(reactContext: ReactApplicationContext) : ReactContextBas
             }
         }
 
-        private fun getMimeTypeForFile(uri: String): String {
+        private fun getCustomMimeType(uri: String): String {
             return when {
                 uri.endsWith(".m3u8", ignoreCase = true) -> "application/vnd.apple.mpegurl"
                 uri.endsWith(".ts", ignoreCase = true) -> "video/mp2t"
