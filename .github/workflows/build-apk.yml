@@ -158,12 +158,11 @@ jobs:
             **OrionTV v${{ steps.package-version.outputs.version }}**
 
             ### 本次更新内容
-            - 📱 手机端自动横屏：进入播放页面自动锁定横屏，退出恢复竖屏
-            - 🎬 全屏修复：视频铺满全屏，无上下黑边
-            - ⏩ 倍速播放：手机端支持 0.5x ~ 2x 速度调节
-            - 🥽 VR SBS 模式：点击眼镜图标开启左右分屏，兼容 VR 眼镜盒子
-
-            > 注意：这是 Debug 版本 APK，仅供测试用途。
+            - ⚡ **播放抗抖动**：大幅扩容了 VR 播放器底层的网络缓冲区，有效缓解高峰期“播几秒卡几秒”的频繁卡顿现象。
+            - 📱 **自动横屏**：手机端进入播放页面自动锁定横屏，退出恢复竖屏。
+            - 🎬 **全屏适配**：视频铺满全屏，消除上下黑边。
+            - ⏩ **倍速播放**：手机端支持 0.5x ~ 2x 播放速度调节。
+            - 🥽 **VR 模式**：点击眼镜图标即可进入左右分屏模式，兼容主流 VR 眼镜盒子。
           draft: false
           prerelease: false
           files: artifacts/orionTV.${{ steps.package-version.outputs.version }}.apk
