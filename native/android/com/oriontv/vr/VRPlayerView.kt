@@ -185,17 +185,17 @@ class VRPlayerView(context: Context) : FrameLayout(context) {
             .setUpstreamDataSourceFactory(upstreamFactory)
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
 
-        // 加大内存缓冲区：
-        //   minBufferMs  = 30s  → 低于此值才继续下载
-        //   maxBufferMs  = 2min → 最多预加载 2 分钟
-        //   playbackMs   = 1.5s → 积累 1.5s 就开始播放（减少首帧延迟）
-        //   rebufferMs   = 3s   → 卡顿后积累 3s 再恢复（减少二次卡顿）
+        // 加大内存缓冲区，提升网络高峰期抗抖动能力：
+        //   minBufferMs  = 50s  → 缓冲区低于 50s 时继续全速下载（原 30s）
+        //   maxBufferMs  = 3min → 最多预加载 3 分钟（原 2min）
+        //   playbackMs   = 2.5s → 积累 2.5s 就开始起播（原 1.5s，增加起步稳定性）
+        //   rebufferMs   = 8s   → 卡顿后积累 8s 再恢复（原 3s，大幅减少频繁二次卡顿）
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                30_000,
-                120_000,
-                1_500,
-                3_000
+                50_000,
+                180_000,
+                2_500,
+                8_000
             )
             .build()
 
